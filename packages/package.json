@@ -1,6 +1,6 @@
 {
   "name": "@rea.ch/slate-angular",
-  "version": "1.9.3",
+  "version": "1.0.0",
   "peerDependencies": {
     "slate": ">= 0.81.1",
     "tslib": "^2.0.0",
