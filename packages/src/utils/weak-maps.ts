@@ -1,4 +1,4 @@
-import { Node, Ancestor, Editor } from 'slate';
+import { Node, Ancestor, Editor, RangeRef } from 'slate';
 import { Key } from './key';
 import { BaseElementComponent } from '../view/base';
 
@@ -28,10 +28,14 @@ export const NODE_TO_KEY: WeakMap<Node, Key> = new WeakMap();
  * Weak maps for storing editor-related state.
  */
 
-export const IS_READONLY: WeakMap<Editor, boolean> = new WeakMap();
+export const IS_READ_ONLY: WeakMap<Editor, boolean> = new WeakMap();
 export const IS_FOCUSED: WeakMap<Editor, boolean> = new WeakMap();
 export const IS_DRAGGING: WeakMap<Editor, boolean> = new WeakMap();
 export const IS_CLICKING: WeakMap<Editor, boolean> = new WeakMap();
+export const IS_COMPOSING: WeakMap<Editor, boolean> = new WeakMap()
+export const IS_ON_COMPOSITION_END: WeakMap<Editor, boolean> = new WeakMap()
+
+export const EDITOR_TO_USER_SELECTION: WeakMap<Editor, RangeRef> = new WeakMap()
 
 /**
  * Weak map for associating the context `onChange` context with the plugin.
