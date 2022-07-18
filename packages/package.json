@@ -1,12 +1,15 @@
 {
-    "name": "slate-angular",
-    "version": "1.9.3",
-    "peerDependencies": {
-        "slate": ">= 0.63.0",
-        "tslib": "^2.0.0",
-        "slate-history": "^0.62.0",
-        "debug": "^4.1.1",
-        "direction": "^1.0.3",
-        "is-hotkey": "^0.1.6"
-    }
+  "name": "slate-angular",
+  "version": "1.9.3",
+  "peerDependencies": {
+    "slate": ">= 0.81.1",
+    "tslib": "^2.0.0",
+    "slate-history": "^0.62.0",
+    "debug": "^4.1.1",
+    "direction": "^1.0.3",
+    "is-hotkey": "^0.1.6",
+    "@angular/common": ">= 12 < 13",
+    "@angular/core": ">= 12 < 13",
+    "@angular/cdk": ">= 12 < 13"
+  }
 }
