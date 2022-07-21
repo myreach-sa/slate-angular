@@ -1,16 +1,17 @@
 import { Component, ViewChild } from "@angular/core";
 import { createEditor, Element } from "slate";
-import { SlateEditableComponent } from "../components/editable/editable.component";
+import { Editable2Component } from "slate-angular/components/editable2/editable2.component";
 import { withAngular } from "../plugins/with-angular";
 import { createDefaultDocument } from "./create-document";
 
 @Component({
     selector: 'basic-editable',
     template: `
-        <slate-editable 
+        <slate-editable-2 
             [editor]="editor"
             [(ngModel)]="value"
-            (ngModelChange)="ngModelChange()"></slate-editable>
+            (ngModelChange)="ngModelChange()"
+        ></slate-editable>
     `
 })
 export class BasicEditableComponent {
@@ -18,8 +19,8 @@ export class BasicEditableComponent {
 
     value: Element[] = createDefaultDocument() as Element[];
 
-    @ViewChild(SlateEditableComponent, { static: true })
-    editableComponent: SlateEditableComponent;
+    @ViewChild(Editable2Component, { static: true })
+    editableComponent: Editable2Component;
 
     ngModelChange() {
     }

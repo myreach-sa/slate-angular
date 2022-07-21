@@ -133,6 +133,8 @@ export class SlateEditableComponent
 
   private deferredOperations: (() => void)[] = [];
 
+  @Input() autoFocus = false;
+
   @Input() editor: AngularEditor;
 
   @Input() renderElement: (element: Element) => ViewType | null;
@@ -235,22 +237,12 @@ export class SlateEditableComponent
   }
 
   ngOnChanges(simpleChanges: SimpleChanges) {
-    // setTimeout(() =>
-    //   EDITOR_TO_MARK_PLACEHOLDER_MARKS.set(this.editor, this.editor.marks)
-    // );
-    
-    if (!this.initialized) {
-      return;
-    }
-    const decorateChange = simpleChanges["decorate"];
-    if (decorateChange) {
-      this.forceFlush();
-    }
-    const readonlyChange = simpleChanges["readonly"];
-    if (readonlyChange) {
-      IS_READ_ONLY.set(this.editor, this.readonly);
-      this.detectContext();
-      this.toSlateSelection();
+    setTimeout(() =>
+      EDITOR_TO_MARK_PLACEHOLDER_MARKS.set(this.editor, this.editor.marks)
+    );
+
+    if (simpleChanges.autoFocus?.currentValue) {
+      this.elementRef.nativeElement.focus();
     }
   }
 
@@ -1285,7 +1277,7 @@ export class SlateEditableComponent
           AngularEditor.isComposing(editor) &&
           nativeEvent.isComposing === false
         ) {
-          IS_COMPOSING.set(editor, false)
+          IS_COMPOSING.set(editor, false);
           this.isComposing = false;
         }
 
@@ -1293,40 +1285,38 @@ export class SlateEditableComponent
           this.isDOMEventHandled(event, this.keydown) ||
           AngularEditor.isComposing(editor)
         ) {
-          return
+          return;
         }
 
-        const { selection } = editor
+        const { selection } = editor;
         const element =
-          editor.children[
-            selection !== null ? selection.focus.path[0] : 0
-          ]
-        const isRTL = getDirection(Node.string(element)) === 'rtl'
+          editor.children[selection !== null ? selection.focus.path[0] : 0];
+        const isRTL = getDirection(Node.string(element)) === "rtl";
 
         // COMPAT: Since we prevent the default behavior on
         // `beforeinput` events, the browser doesn't think there's ever
         // any history stack to undo or redo, so we have to manage these
         // hotkeys ourselves. (2019/11/06)
         if (Hotkeys.isRedo(nativeEvent)) {
-          event.preventDefault()
-          const maybeHistoryEditor: any = editor
+          event.preventDefault();
+          const maybeHistoryEditor: any = editor;
 
-          if (typeof maybeHistoryEditor.redo === 'function') {
-            maybeHistoryEditor.redo()
+          if (typeof maybeHistoryEditor.redo === "function") {
+            maybeHistoryEditor.redo();
           }
 
-          return
+          return;
         }
 
         if (Hotkeys.isUndo(nativeEvent)) {
-          event.preventDefault()
-          const maybeHistoryEditor: any = editor
+          event.preventDefault();
+          const maybeHistoryEditor: any = editor;
 
-          if (typeof maybeHistoryEditor.undo === 'function') {
-            maybeHistoryEditor.undo()
+          if (typeof maybeHistoryEditor.undo === "function") {
+            maybeHistoryEditor.undo();
           }
 
-          return
+          return;
         }
 
         // COMPAT: Certain browsers don't handle the selection updates
@@ -1334,31 +1324,31 @@ export class SlateEditableComponent
         // And in Firefox, the selection isn't properly collapsed.
         // (2017/10/17)
         if (Hotkeys.isMoveLineBackward(nativeEvent)) {
-          event.preventDefault()
-          Transforms.move(editor, { unit: 'line', reverse: true })
-          return
+          event.preventDefault();
+          Transforms.move(editor, { unit: "line", reverse: true });
+          return;
         }
 
         if (Hotkeys.isMoveLineForward(nativeEvent)) {
-          event.preventDefault()
-          Transforms.move(editor, { unit: 'line' })
-          return
+          event.preventDefault();
+          Transforms.move(editor, { unit: "line" });
+          return;
         }
 
         if (Hotkeys.isExtendLineBackward(nativeEvent)) {
-          event.preventDefault()
+          event.preventDefault();
           Transforms.move(editor, {
-            unit: 'line',
-            edge: 'focus',
+            unit: "line",
+            edge: "focus",
             reverse: true,
-          })
-          return
+          });
+          return;
         }
 
         if (Hotkeys.isExtendLineForward(nativeEvent)) {
-          event.preventDefault()
-          Transforms.move(editor, { unit: 'line', edge: 'focus' })
-          return
+          event.preventDefault();
+          Transforms.move(editor, { unit: "line", edge: "focus" });
+          return;
         }
 
         // COMPAT: If a void node is selected, or a zero-width text node
@@ -1367,49 +1357,49 @@ export class SlateEditableComponent
         // the void node with the zero-width space not being an empty
         // string.
         if (Hotkeys.isMoveBackward(nativeEvent)) {
-          event.preventDefault()
+          event.preventDefault();
 
           if (selection && Range.isCollapsed(selection)) {
-            Transforms.move(editor, { reverse: !isRTL })
+            Transforms.move(editor, { reverse: !isRTL });
           } else {
-            Transforms.collapse(editor, { edge: 'start' })
+            Transforms.collapse(editor, { edge: "start" });
           }
 
-          return
+          return;
         }
 
         if (Hotkeys.isMoveForward(nativeEvent)) {
-          event.preventDefault()
+          event.preventDefault();
 
           if (selection && Range.isCollapsed(selection)) {
-            Transforms.move(editor, { reverse: isRTL })
+            Transforms.move(editor, { reverse: isRTL });
           } else {
-            Transforms.collapse(editor, { edge: 'end' })
+            Transforms.collapse(editor, { edge: "end" });
           }
 
-          return
+          return;
         }
 
         if (Hotkeys.isMoveWordBackward(nativeEvent)) {
-          event.preventDefault()
+          event.preventDefault();
 
           if (selection && Range.isExpanded(selection)) {
-            Transforms.collapse(editor, { edge: 'focus' })
+            Transforms.collapse(editor, { edge: "focus" });
           }
 
-          Transforms.move(editor, { unit: 'word', reverse: !isRTL })
-          return
+          Transforms.move(editor, { unit: "word", reverse: !isRTL });
+          return;
         }
 
         if (Hotkeys.isMoveWordForward(nativeEvent)) {
-          event.preventDefault()
+          event.preventDefault();
 
           if (selection && Range.isExpanded(selection)) {
-            Transforms.collapse(editor, { edge: 'focus' })
+            Transforms.collapse(editor, { edge: "focus" });
           }
 
-          Transforms.move(editor, { unit: 'word', reverse: isRTL })
-          return
+          Transforms.move(editor, { unit: "word", reverse: isRTL });
+          return;
         }
 
         // COMPAT: Certain browsers don't support the `beforeinput` event, so we
@@ -1423,92 +1413,92 @@ export class SlateEditableComponent
             Hotkeys.isItalic(nativeEvent) ||
             Hotkeys.isTransposeCharacter(nativeEvent)
           ) {
-            event.preventDefault()
-            return
+            event.preventDefault();
+            return;
           }
 
           if (Hotkeys.isSoftBreak(nativeEvent)) {
-            event.preventDefault()
-            Editor.insertSoftBreak(editor)
-            return
+            event.preventDefault();
+            Editor.insertSoftBreak(editor);
+            return;
           }
 
           if (Hotkeys.isSplitBlock(nativeEvent)) {
-            event.preventDefault()
-            Editor.insertBreak(editor)
-            return
+            event.preventDefault();
+            Editor.insertBreak(editor);
+            return;
           }
 
           if (Hotkeys.isDeleteBackward(nativeEvent)) {
-            event.preventDefault()
+            event.preventDefault();
 
             if (selection && Range.isExpanded(selection)) {
-              Editor.deleteFragment(editor, { direction: 'backward' })
+              Editor.deleteFragment(editor, { direction: "backward" });
             } else {
-              Editor.deleteBackward(editor)
+              Editor.deleteBackward(editor);
             }
 
-            return
+            return;
           }
 
           if (Hotkeys.isDeleteForward(nativeEvent)) {
-            event.preventDefault()
+            event.preventDefault();
 
             if (selection && Range.isExpanded(selection)) {
-              Editor.deleteFragment(editor, { direction: 'forward' })
+              Editor.deleteFragment(editor, { direction: "forward" });
             } else {
-              Editor.deleteForward(editor)
+              Editor.deleteForward(editor);
             }
 
-            return
+            return;
           }
 
           if (Hotkeys.isDeleteLineBackward(nativeEvent)) {
-            event.preventDefault()
+            event.preventDefault();
 
             if (selection && Range.isExpanded(selection)) {
-              Editor.deleteFragment(editor, { direction: 'backward' })
+              Editor.deleteFragment(editor, { direction: "backward" });
             } else {
-              Editor.deleteBackward(editor, { unit: 'line' })
+              Editor.deleteBackward(editor, { unit: "line" });
             }
 
-            return
+            return;
           }
 
           if (Hotkeys.isDeleteLineForward(nativeEvent)) {
-            event.preventDefault()
+            event.preventDefault();
 
             if (selection && Range.isExpanded(selection)) {
-              Editor.deleteFragment(editor, { direction: 'forward' })
+              Editor.deleteFragment(editor, { direction: "forward" });
             } else {
-              Editor.deleteForward(editor, { unit: 'line' })
+              Editor.deleteForward(editor, { unit: "line" });
             }
 
-            return
+            return;
           }
 
           if (Hotkeys.isDeleteWordBackward(nativeEvent)) {
-            event.preventDefault()
+            event.preventDefault();
 
             if (selection && Range.isExpanded(selection)) {
-              Editor.deleteFragment(editor, { direction: 'backward' })
+              Editor.deleteFragment(editor, { direction: "backward" });
             } else {
-              Editor.deleteBackward(editor, { unit: 'word' })
+              Editor.deleteBackward(editor, { unit: "word" });
             }
 
-            return
+            return;
           }
 
           if (Hotkeys.isDeleteWordForward(nativeEvent)) {
-            event.preventDefault()
+            event.preventDefault();
 
             if (selection && Range.isExpanded(selection)) {
-              Editor.deleteFragment(editor, { direction: 'forward' })
+              Editor.deleteFragment(editor, { direction: "forward" });
             } else {
-              Editor.deleteForward(editor, { unit: 'word' })
+              Editor.deleteForward(editor, { unit: "word" });
             }
 
-            return
+            return;
           }
         } else {
           if (IS_CHROME || IS_SAFARI) {
@@ -1520,20 +1510,17 @@ export class SlateEditableComponent
                 Hotkeys.isDeleteForward(nativeEvent)) &&
               Range.isCollapsed(selection)
             ) {
-              const currentNode = Node.parent(
-                editor,
-                selection.anchor.path
-              )
+              const currentNode = Node.parent(editor, selection.anchor.path);
 
               if (
                 Element.isElement(currentNode) &&
                 Editor.isVoid(editor, currentNode) &&
                 Editor.isInline(editor, currentNode)
               ) {
-                event.preventDefault()
-                Editor.deleteBackward(editor, { unit: 'block' })
+                event.preventDefault();
+                Editor.deleteBackward(editor, { unit: "block" });
 
-                return
+                return;
               }
             }
           }
@@ -1557,12 +1544,9 @@ export class SlateEditableComponent
       // fall back to React's `onPaste` here instead.
       // COMPAT: Firefox, Chrome and Safari don't emit `beforeinput` events
       // when "paste without formatting" is used, so fallback. (2020/02/20)
-      if (
-        !HAS_BEFORE_INPUT_SUPPORT ||
-        isPlainTextOnlyPaste(event)
-      ) {
-        event.preventDefault()
-        AngularEditor.insertData(this.editor, event.clipboardData)
+      if (!HAS_BEFORE_INPUT_SUPPORT || isPlainTextOnlyPaste(event)) {
+        event.preventDefault();
+        AngularEditor.insertData(this.editor, event.clipboardData);
       }
     }
   }

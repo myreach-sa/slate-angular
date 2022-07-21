@@ -1,0 +1,11 @@
+<restore-dom-component [editor]="editor" [receivedUserInput]="receivedUserInput">
+    
+    <slate-children
+        [children]="editor.children"
+        [context]="context"
+        [viewContext]="viewContext"
+    ></slate-children>
+
+    <slate-string-template #templateComponent></slate-string-template>
+
+</restore-dom-component>
