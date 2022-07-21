@@ -40,7 +40,7 @@ import { AngularEditor } from "../../plugins/angular-editor";
 import { SlateErrorCode } from "../../types/error";
 import { SlatePlaceholder } from "../../types/feature";
 import { ViewType } from "../../types/view";
-import { isDecoratorRangeListEqual } from "../../utils";
+import { isDecoratorRangeListEqual, TRIPLE_CLICK } from "../../utils";
 import {
   DOMElement,
   DOMNode,
@@ -56,6 +56,7 @@ import {
 import Hotkeys from "../../utils/hotkeys";
 import {
   HAS_BEFORE_INPUT_SUPPORT,
+  IS_ANDROID,
   IS_CHROME,
   IS_FIREFOX,
   IS_FIREFOX_LEGACY,
@@ -68,7 +69,9 @@ import {
 import { check, normalize } from "../../utils/global-normalize";
 import {
   EDITOR_TO_ELEMENT,
+  EDITOR_TO_MARK_PLACEHOLDER_MARKS,
   EDITOR_TO_ON_CHANGE,
+  EDITOR_TO_USER_MARKS,
   EDITOR_TO_USER_SELECTION,
   EDITOR_TO_WINDOW,
   ELEMENT_TO_NODE,
@@ -79,6 +82,8 @@ import {
 } from "../../utils/weak-maps";
 import { SlateChildrenContext, SlateViewContext } from "../../view/context";
 import { SlateStringTemplateComponent } from "../string/template.component";
+import { useAndroidInputManager } from "../../hooks/android-input-manager/use-android-input-manager";
+import { AndroidInputManager } from "../../hooks/android-input-manager/android-input-manager";
 
 const timeDebug = Debug("slate-angular-time");
 
@@ -116,6 +121,7 @@ export class SlateEditableComponent
   isDraggingInternally = false;
   isUpdatingSelection = false;
   latestElement = null as DOMElement | null;
+  hasInsertPrefixInCompositon = false;
 
   protected manualListeners: (() => void)[] = [];
 
@@ -124,13 +130,6 @@ export class SlateEditableComponent
   private onTouchedCallback: () => void = () => {};
 
   private onChangeCallback: (_: any) => void = () => {};
-
-  private state = {
-    hasInsertPrefixInCompositon: false,
-    isDraggingInternally: false,
-    isUpdatingSelection: false,
-    latestElement: null as DOMElement | null,
-  };
 
   private deferredOperations: (() => void)[] = [];
 
@@ -191,6 +190,8 @@ export class SlateEditableComponent
   @ViewChild("templateComponent", { static: true, read: ElementRef })
   templateElementRef: ElementRef<any>;
 
+  androidInputManager!: AndroidInputManager;
+
   constructor(
     public elementRef: ElementRef,
     public renderer2: Renderer2,
@@ -225,9 +226,19 @@ export class SlateEditableComponent
     // add browser class
     let browserClass = IS_FIREFOX ? "firefox" : IS_SAFARI ? "safari" : "";
     browserClass && this.elementRef.nativeElement.classList.add(browserClass);
+
+    this.androidInputManager = useAndroidInputManager(this.editor, {
+      node: this.elementRef.nativeElement,
+      onDOMSelectionChange: this.toSlateSelection,
+      scheduleOnDOMSelectionChange: () => this.toSlateSelection(),
+    });
   }
 
   ngOnChanges(simpleChanges: SimpleChanges) {
+    // setTimeout(() =>
+    //   EDITOR_TO_MARK_PLACEHOLDER_MARKS.set(this.editor, this.editor.marks)
+    // );
+    
     if (!this.initialized) {
       return;
     }
@@ -286,10 +297,10 @@ export class SlateEditableComponent
       "compositionend",
       this.onDOMCompositionEnd.bind(this)
     );
-    // this.addEventListener(
-    //   "compositionupdate",
-    //   this.onDOMCompositionUpdate.bind(this)
-    // );
+    this.addEventListener(
+      "compositionupdate",
+      this.onDOMCompositionUpdate.bind(this)
+    );
     this.addEventListener(
       "compositionstart",
       this.onDOMCompositionStart.bind(this)
@@ -573,22 +584,19 @@ export class SlateEditableComponent
   }
 
   private toSlateSelection() {
-    if (
-      !this.readonly &&
-      !this.isComposing &&
-      !this.isUpdatingSelection &&
-      !this.isDraggingInternally
-    ) {
+    try {
       const editor = this.editor;
-      const state = this.state;
-      try {
+      if (
+        (IS_ANDROID || !AngularEditor.isComposing(editor)) &&
+        (!this.isUpdatingSelection || this.androidInputManager?.isFlushing())
+      ) {
         const root = AngularEditor.findDocumentOrShadowRoot(editor);
         const { activeElement } = root;
         const el = AngularEditor.toDOMNode(editor, editor);
         const domSelection = root.getSelection();
 
         if (activeElement === el) {
-          state.latestElement = activeElement;
+          this.latestElement = activeElement;
           IS_FOCUSED.set(editor, true);
         } else {
           IS_FOCUSED.delete(editor);
@@ -611,21 +619,32 @@ export class SlateEditableComponent
         if (anchorNodeSelectable && focusNodeSelectable) {
           const range = AngularEditor.toSlateRange(editor, domSelection, {
             exactMatch: false,
-            suppressThrow: false,
+            suppressThrow: true,
           });
-          Transforms.select(editor, range);
+
+          if (range) {
+            if (
+              !AngularEditor.isComposing(editor) &&
+              !this.androidInputManager?.hasPendingDiffs() &&
+              !this.androidInputManager?.isFlushing()
+            ) {
+              Transforms.select(editor, range);
+            } else {
+              this.androidInputManager?.handleUserSelect(range);
+            }
+          }
         }
-      } catch (error) {
-        this.editor.onError({
-          code: SlateErrorCode.ToSlateSelectionError,
-          nativeError: error,
-        });
       }
+    } catch (error) {
+      this.editor.onError({
+        code: SlateErrorCode.ToSlateSelectionError,
+        nativeError: error,
+      });
     }
   }
 
   private onDOMBeforeInput(
-    event: Event & {
+    event: InputEvent & {
       inputType: string;
       isComposing: boolean;
       data: string | null;
@@ -634,22 +653,33 @@ export class SlateEditableComponent
     }
   ) {
     const editor = this.editor;
-    if (
-      !this.readonly &&
-      hasEditableTarget(editor, event.target) &&
-      !this.isDOMEventHandled(event, this.beforeInput)
-    ) {
-      try {
+    try {
+      if (
+        !this.readonly &&
+        hasEditableTarget(editor, event.target) &&
+        !this.isDOMEventHandled(event, this.beforeInput)
+      ) {
+        // COMPAT: BeforeInput events aren't cancelable on android, so we have to handle them differently using the android input manager.
+        if (this.androidInputManager) {
+          return this.androidInputManager.handleDOMBeforeInput(event);
+        }
+
+        // Some IMEs/Chrome extensions like e.g. Grammarly set the selection immediately before
+        // triggering a `beforeinput` expecting the change to be applied to the immediately before
+        // set selection.
+        // scheduleOnDOMSelectionChange.flush();
+        // onDOMSelectionChange.flush();
+
         const { selection } = editor;
         const { inputType: type } = event;
         const data = (event as any).dataTransfer || event.data || undefined;
 
-        const isCompositionChange =
-          type === "insertCompositionText" || type === "deleteCompositionText";
-
-        // COMPAT: use composition change events as a hint to where we should insert
-        // composition text if we aren't composing to work around https://github.com/ianstormtaylor/slate/issues/5038
-        if (isCompositionChange && AngularEditor.isComposing(editor)) {
+        // These two types occur while a user is composing text and can't be
+        // cancelled. Let them through and wait for the composition to end.
+        if (
+          type === "insertCompositionText" ||
+          type === "deleteCompositionText"
+        ) {
           return;
         }
 
@@ -684,36 +714,15 @@ export class SlateEditableComponent
           const [node, offset] = AngularEditor.toDOMPoint(editor, anchor);
           const anchorNode = node.parentElement?.closest("a");
 
-          const window = AngularEditor.getWindow(editor);
+          if (anchorNode && AngularEditor.hasDOMNode(editor, anchorNode)) {
+            const { document } = AngularEditor.getWindow(editor);
 
-          if (
-            native &&
-            anchorNode &&
-            AngularEditor.hasDOMNode(editor, anchorNode)
-          ) {
             // Find the last text node inside the anchor.
-            const lastText = window?.document
+            const lastText = document
               .createTreeWalker(anchorNode, NodeFilter.SHOW_TEXT)
               .lastChild() as DOMText | null;
 
             if (lastText === node && lastText.textContent?.length === offset) {
-              native = false;
-            }
-          }
-
-          // Chrome has issues with the presence of tab characters inside elements with whiteSpace = 'pre'
-          // causing abnormal insert behavior: https://bugs.chromium.org/p/chromium/issues/detail?id=1219139
-          if (
-            native &&
-            node.parentElement &&
-            window?.getComputedStyle(node.parentElement)?.whiteSpace === "pre"
-          ) {
-            const block = Editor.above(editor, {
-              at: anchor.path,
-              match: (n) => Editor.isBlock(editor, n),
-            });
-
-            if (block && Node.string(block[0]).includes("\t")) {
               native = false;
             }
           }
@@ -735,9 +744,7 @@ export class SlateEditableComponent
               native = false;
 
               const selectionRef =
-                !isCompositionChange &&
-                editor.selection &&
-                Editor.rangeRef(editor, editor.selection);
+                editor.selection && Editor.rangeRef(editor, editor.selection);
 
               Transforms.select(editor, range);
 
@@ -746,12 +753,6 @@ export class SlateEditableComponent
               }
             }
           }
-        }
-
-        // Composition change types occur while a user is composing text and can't be
-        // cancelled. Let them through and wait for the composition to end.
-        if (isCompositionChange) {
-          return;
         }
 
         if (!native) {
@@ -890,38 +891,37 @@ export class SlateEditableComponent
         ) {
           Transforms.select(editor, toRestore);
         }
-      } catch (error) {
-        this.editor.onError({
-          code: SlateErrorCode.OnDOMBeforeInputError,
-          nativeError: error,
-        });
       }
+    } catch (error) {
+      this.editor.onError({
+        code: SlateErrorCode.OnDOMBeforeInputError,
+        nativeError: error,
+      });
     }
   }
 
   private onDOMBlur(event: FocusEvent) {
+    const editor = this.editor;
     if (
       this.readonly ||
       this.isUpdatingSelection ||
-      !hasEditableTarget(this.editor, event.target) ||
+      !hasEditableTarget(editor, event.target) ||
       this.isDOMEventHandled(event, this.blur)
     ) {
       return;
     }
 
-    const window = AngularEditor.getWindow(this.editor);
-
     // COMPAT: If the current `activeElement` is still the previous
     // one, this is due to the window being blurred when the tab
     // itself becomes unfocused, so we want to abort early to allow to
     // editor to stay focused when the tab becomes focused again.
-    const root = AngularEditor.findDocumentOrShadowRoot(this.editor);
+    const root = AngularEditor.findDocumentOrShadowRoot(editor);
     if (this.latestElement === root.activeElement) {
       return;
     }
 
     const { relatedTarget } = event;
-    const el = AngularEditor.toDOMNode(this.editor, this.editor);
+    const el = AngularEditor.toDOMNode(editor, editor);
 
     // COMPAT: The event should be ignored if the focus is returning
     // to the editor from an embedded editable element (eg. an <input>
@@ -945,36 +945,72 @@ export class SlateEditableComponent
     if (
       relatedTarget != null &&
       isDOMNode(relatedTarget) &&
-      AngularEditor.hasDOMNode(this.editor, relatedTarget)
+      AngularEditor.hasDOMNode(editor, relatedTarget)
     ) {
-      const node = AngularEditor.toSlateNode(this.editor, relatedTarget);
+      const node = AngularEditor.toSlateNode(editor, relatedTarget);
 
-      if (Element.isElement(node) && !this.editor.isVoid(node)) {
+      if (Element.isElement(node) && !editor.isVoid(node)) {
         return;
       }
     }
 
-    IS_FOCUSED.delete(this.editor);
+    // COMPAT: Safari doesn't always remove the selection even if the content-
+    // editable element no longer has focus. Refer to:
+    // https://stackoverflow.com/questions/12353247/force-contenteditable-div-to-stop-accepting-input-after-it-loses-focus-under-web
+    if (IS_SAFARI) {
+      const domSelection = root.getSelection();
+      domSelection?.removeAllRanges();
+    }
+
+    IS_FOCUSED.delete(editor);
   }
 
   private onDOMClick(event: MouseEvent) {
+    const editor = this.editor;
     if (
-      !this.readonly &&
-      hasTarget(this.editor, event.target) &&
+      hasTarget(editor, event.target) &&
       !this.isDOMEventHandled(event, this.click) &&
       isDOMNode(event.target)
     ) {
-      const node = AngularEditor.toSlateNode(this.editor, event.target);
-      const path = AngularEditor.findPath(this.editor, node);
-      const start = Editor.start(this.editor, path);
-      const end = Editor.end(this.editor, path);
+      const node = AngularEditor.toSlateNode(editor, event.target);
+      const path = AngularEditor.findPath(editor, node);
 
-      const startVoid = Editor.void(this.editor, { at: start });
-      const endVoid = Editor.void(this.editor, { at: end });
+      // At this time, the Slate document may be arbitrarily different,
+      // because onClick handlers can change the document before we get here.
+      // Therefore we must check that this path actually exists,
+      // and that it still refers to the same node.
+      if (!Editor.hasPath(editor, path) || Node.get(editor, path) !== node) {
+        return;
+      }
+
+      if (event.detail === TRIPLE_CLICK && path.length >= 1) {
+        let blockPath = path;
+        if (!Editor.isBlock(editor, node)) {
+          const block = Editor.above(editor, {
+            match: (n) => Editor.isBlock(editor, n),
+            at: path,
+          });
+
+          blockPath = block?.[1] ?? path.slice(0, 1);
+        }
+
+        const range = Editor.range(editor, blockPath);
+        Transforms.select(editor, range);
+        return;
+      }
+
+      if (this.readonly) {
+        return;
+      }
+
+      const start = Editor.start(editor, path);
+      const end = Editor.end(editor, path);
+      const startVoid = Editor.void(editor, { at: start });
+      const endVoid = Editor.void(editor, { at: end });
 
       if (startVoid && endVoid && Path.equals(startVoid[1], endVoid[1])) {
-        const range = Editor.range(this.editor, start);
-        Transforms.select(this.editor, range);
+        const range = Editor.range(editor, start);
+        Transforms.select(editor, range);
       }
     }
   }
@@ -982,33 +1018,48 @@ export class SlateEditableComponent
   private onDOMCompositionEnd(event: CompositionEvent) {
     const editor = this.editor;
 
-    if (
-      hasEditableTarget(editor, event.target) &&
-      !this.isDOMEventHandled(event, this.compositionEnd)
-    ) {
-      if (!event.data && !Range.isCollapsed(this.editor.selection)) {
-        Transforms.delete(this.editor);
+    if (hasEditableTarget(editor, event.target)) {
+      if (AngularEditor.isComposing(editor)) {
+        this.isComposing = false;
+        IS_COMPOSING.set(editor, false);
       }
+
+      this.androidInputManager?.handleCompositionEnd(event);
+
+      if (this.isDOMEventHandled(event, this.compositionEnd) || IS_ANDROID) {
+        return;
+      }
+
+      // COMPAT: In Chrome, `beforeinput` events for compositions
+      // aren't correct and never fire the "insertFromComposition"
+      // type that we need. So instead, insert whenever a composition
+      // ends since it will already have been committed to the DOM.
       if (
-        hasEditableTarget(this.editor, event.target) &&
-        !this.isDOMEventHandled(event, this.compositionEnd)
+        !IS_SAFARI &&
+        !IS_FIREFOX_LEGACY &&
+        !IS_IOS &&
+        !IS_QQBROWSER &&
+        !IS_WECHATBROWSER &&
+        !IS_UC_MOBILE &&
+        event.data
       ) {
-        // COMPAT: In Chrome/Firefox, `beforeinput` events for compositions
-        // aren't correct and never fire the "insertFromComposition"
-        // type that we need. So instead, insert whenever a composition
-        // ends since it will already have been committed to the DOM.
-        if (this.isComposing === true && !IS_SAFARI && event.data) {
-          preventInsertFromComposition(event, this.editor);
-          Editor.insertText(this.editor, event.data);
+        const placeholderMarks = EDITOR_TO_MARK_PLACEHOLDER_MARKS.get(editor);
+        EDITOR_TO_MARK_PLACEHOLDER_MARKS.delete(editor);
+
+        // Ensure we insert text with the marks the user was actually seeing
+        if (placeholderMarks !== undefined) {
+          EDITOR_TO_USER_MARKS.set(editor, editor.marks);
+          editor.marks = placeholderMarks;
         }
 
-        // COMPAT: In Firefox 87.0 CompositionEnd fire twice
-        // so we need avoid repeat isnertText by isComposing === true,
-        this.isComposing = false;
-      }
+        Editor.insertText(editor, event.data);
 
-      this.detectContext();
-      this.cdr.detectChanges();
+        const userMarks = EDITOR_TO_USER_MARKS.get(editor);
+        EDITOR_TO_USER_MARKS.delete(editor);
+        if (userMarks !== undefined) {
+          editor.marks = userMarks;
+        }
+      }
     }
   }
 
@@ -1028,12 +1079,16 @@ export class SlateEditableComponent
   private onDOMCompositionStart(event: CompositionEvent) {
     const editor = this.editor;
 
-    if (
-      hasEditableTarget(editor, event.target) &&
-      !this.isDOMEventHandled(event, this.compositionStart)
-    ) {
-      const { selection, marks } = editor;
+    if (hasEditableTarget(editor, event.target)) {
+      this.androidInputManager?.handleCompositionStart(event);
 
+      if (this.isDOMEventHandled(event, this.compositionStart) || IS_ANDROID) {
+        return;
+      }
+
+      this.isComposing = true;
+
+      const { selection } = editor;
       if (selection) {
         if (Range.isExpanded(selection)) {
           Editor.deleteFragment(editor);
@@ -1053,98 +1108,85 @@ export class SlateEditableComponent
             });
           }
         }
-        // insert new node in advance to ensure composition text will insert
-        // along with final input text
-        // add Unicode BOM prefix to avoid normalize removing this node
-        if (marks) {
-          this.state.hasInsertPrefixInCompositon = true;
-          Transforms.insertNodes(
-            editor,
-            {
-              text: "\uFEFF",
-              ...marks,
-            },
-            {
-              select: true,
-            }
-          );
-        }
-
-        this.cdr.detectChanges();
       }
     }
   }
 
   private onDOMCopy(event: ClipboardEvent) {
-    const window = AngularEditor.getWindow(this.editor);
-    const isOutsideSlate =
-      !hasStringTarget(window.getSelection()) &&
-      isTargetInsideVoid(this.editor, event.target);
+    const editor = this.editor;
     if (
-      !isOutsideSlate &&
-      hasTarget(this.editor, event.target) &&
-      !this.readonly &&
+      hasEditableTarget(editor, event.target) &&
       !this.isDOMEventHandled(event, this.copy)
     ) {
       event.preventDefault();
-      AngularEditor.setFragmentData(this.editor, event.clipboardData, "copy");
+      AngularEditor.setFragmentData(editor, event.clipboardData, "copy");
     }
   }
 
   private onDOMCut(event: ClipboardEvent) {
+    const editor = this.editor;
     if (
       !this.readonly &&
-      hasEditableTarget(this.editor, event.target) &&
+      hasEditableTarget(editor, event.target) &&
       !this.isDOMEventHandled(event, this.cut)
     ) {
       event.preventDefault();
-      AngularEditor.setFragmentData(this.editor, event.clipboardData, "cut");
-      const { selection } = this.editor;
+      AngularEditor.setFragmentData(editor, event.clipboardData, "cut");
+      const { selection } = editor;
 
       if (selection) {
-        AngularEditor.deleteCutData(this.editor);
+        if (Range.isExpanded(selection)) {
+          Editor.deleteFragment(editor);
+        } else {
+          const node = Node.parent(editor, selection.anchor.path);
+          if (Editor.isVoid(editor, node)) {
+            Transforms.delete(editor);
+          }
+        }
       }
     }
   }
 
   private onDOMDragOver(event: DragEvent) {
+    const editor = this.editor;
     if (
-      hasTarget(this.editor, event.target) &&
+      hasTarget(editor, event.target) &&
       !this.isDOMEventHandled(event, this.dragOver)
     ) {
       // Only when the target is void, call `preventDefault` to signal
       // that drops are allowed. Editable content is droppable by
       // default, and calling `preventDefault` hides the cursor.
-      const node = AngularEditor.toSlateNode(this.editor, event.target);
+      const node = AngularEditor.toSlateNode(editor, event.target);
 
-      if (Editor.isVoid(this.editor, node)) {
+      if (Editor.isVoid(editor, node)) {
         event.preventDefault();
       }
     }
   }
 
   private onDOMDragStart(event: DragEvent) {
+    const editor = this.editor;
     if (
       !this.readonly &&
-      hasTarget(this.editor, event.target) &&
+      hasTarget(editor, event.target) &&
       !this.isDOMEventHandled(event, this.dragStart)
     ) {
-      const node = AngularEditor.toSlateNode(this.editor, event.target);
-      const path = AngularEditor.findPath(this.editor, node);
+      const node = AngularEditor.toSlateNode(editor, event.target);
+      const path = AngularEditor.findPath(editor, node);
       const voidMatch =
-        Editor.isVoid(this.editor, node) ||
-        Editor.void(this.editor, { at: path, voids: true });
+        Editor.isVoid(editor, node) ||
+        Editor.void(editor, { at: path, voids: true });
 
       // If starting a drag on a void node, make sure it is selected
       // so that it shows up in the selection's fragment.
       if (voidMatch) {
-        const range = Editor.range(this.editor, path);
-        Transforms.select(this.editor, range);
+        const range = Editor.range(editor, path);
+        Transforms.select(editor, range);
       }
 
       this.isDraggingInternally = true;
 
-      AngularEditor.setFragmentData(this.editor, event.dataTransfer, "drag");
+      AngularEditor.setFragmentData(editor, event.dataTransfer, "drag");
     }
   }
 
@@ -1152,10 +1194,11 @@ export class SlateEditableComponent
     const editor = this.editor;
     if (
       !this.readonly &&
-      hasTarget(this.editor, event.target) &&
+      hasTarget(editor, event.target) &&
       !this.isDOMEventHandled(event, this.drop)
     ) {
       event.preventDefault();
+
       // Keep a reference to the dragged range before updating selection
       const draggedRange = editor.selection;
 
@@ -1166,13 +1209,15 @@ export class SlateEditableComponent
       Transforms.select(editor, range);
 
       if (this.isDraggingInternally) {
-        if (draggedRange) {
+        if (
+          draggedRange &&
+          !Range.equals(draggedRange, range) &&
+          !Editor.void(editor, { at: range, voids: true })
+        ) {
           Transforms.delete(editor, {
             at: draggedRange,
           });
         }
-
-        this.isDraggingInternally = false;
       }
 
       AngularEditor.insertData(editor, data);
@@ -1183,28 +1228,36 @@ export class SlateEditableComponent
         AngularEditor.focus(editor);
       }
     }
+
+    this.isDraggingInternally = false;
   }
 
   private onDOMDragEnd(event: DragEvent) {
     if (
       !this.readonly &&
       this.isDraggingInternally &&
-      hasTarget(this.editor, event.target) &&
-      !this.isDOMEventHandled(event, this.dragEnd)
+      this.dragEnd &&
+      hasTarget(this.editor, event.target)
     ) {
-      this.isDraggingInternally = false;
+      this.dragEnd(event);
     }
+
+    // When dropping on a different droppable element than the current editor,
+    // `onDrop` is not called. So we need to clean up in `onDragEnd` instead.
+    // Note: `onDragEnd` is only called when `onDrop` is not called
+    this.isDraggingInternally = false;
   }
 
   private onDOMFocus(event: Event) {
+    const editor = this.editor;
     if (
       !this.readonly &&
       !this.isUpdatingSelection &&
-      hasEditableTarget(this.editor, event.target) &&
+      hasEditableTarget(editor, event.target) &&
       !this.isDOMEventHandled(event, this.focus)
     ) {
-      const el = AngularEditor.toDOMNode(this.editor, this.editor);
-      const root = AngularEditor.findDocumentOrShadowRoot(this.editor);
+      const el = AngularEditor.toDOMNode(editor, editor);
+      const root = AngularEditor.findDocumentOrShadowRoot(editor);
       this.latestElement = root.activeElement;
 
       // COMPAT: If the editor has nested editable elements, the focus
@@ -1215,15 +1268,16 @@ export class SlateEditableComponent
         return;
       }
 
-      IS_FOCUSED.set(this.editor, true);
+      IS_FOCUSED.set(editor, true);
     }
   }
 
   private onDOMKeydown(event: KeyboardEvent) {
     const editor = this.editor;
-    if (!this.readonly && hasEditableTarget(editor, event.target)) {
-      const nativeEvent = event;
-      try {
+    try {
+      if (!this.readonly && hasEditableTarget(editor, event.target)) {
+        const nativeEvent = event;
+
         // COMPAT: The composition end event isn't fired reliably in all browsers,
         // so we sometimes might end up stuck in a composition state even though we
         // aren't composing any more.
@@ -1231,7 +1285,7 @@ export class SlateEditableComponent
           AngularEditor.isComposing(editor) &&
           nativeEvent.isComposing === false
         ) {
-          IS_COMPOSING.set(editor, false);
+          IS_COMPOSING.set(editor, false)
           this.isComposing = false;
         }
 
@@ -1239,38 +1293,40 @@ export class SlateEditableComponent
           this.isDOMEventHandled(event, this.keydown) ||
           AngularEditor.isComposing(editor)
         ) {
-          return;
+          return
         }
 
-        const { selection } = editor;
+        const { selection } = editor
         const element =
-          editor.children[selection !== null ? selection.focus.path[0] : 0];
-        const isRTL = getDirection(Node.string(element)) === "rtl";
+          editor.children[
+            selection !== null ? selection.focus.path[0] : 0
+          ]
+        const isRTL = getDirection(Node.string(element)) === 'rtl'
 
         // COMPAT: Since we prevent the default behavior on
         // `beforeinput` events, the browser doesn't think there's ever
         // any history stack to undo or redo, so we have to manage these
         // hotkeys ourselves. (2019/11/06)
         if (Hotkeys.isRedo(nativeEvent)) {
-          event.preventDefault();
-          const maybeHistoryEditor: any = editor;
+          event.preventDefault()
+          const maybeHistoryEditor: any = editor
 
-          if (typeof maybeHistoryEditor.redo === "function") {
-            maybeHistoryEditor.redo();
+          if (typeof maybeHistoryEditor.redo === 'function') {
+            maybeHistoryEditor.redo()
           }
 
-          return;
+          return
         }
 
         if (Hotkeys.isUndo(nativeEvent)) {
-          event.preventDefault();
-          const maybeHistoryEditor: any = editor;
+          event.preventDefault()
+          const maybeHistoryEditor: any = editor
 
-          if (typeof maybeHistoryEditor.undo === "function") {
-            maybeHistoryEditor.undo();
+          if (typeof maybeHistoryEditor.undo === 'function') {
+            maybeHistoryEditor.undo()
           }
 
-          return;
+          return
         }
 
         // COMPAT: Certain browsers don't handle the selection updates
@@ -1278,31 +1334,31 @@ export class SlateEditableComponent
         // And in Firefox, the selection isn't properly collapsed.
         // (2017/10/17)
         if (Hotkeys.isMoveLineBackward(nativeEvent)) {
-          event.preventDefault();
-          Transforms.move(editor, { unit: "line", reverse: true });
-          return;
+          event.preventDefault()
+          Transforms.move(editor, { unit: 'line', reverse: true })
+          return
         }
 
         if (Hotkeys.isMoveLineForward(nativeEvent)) {
-          event.preventDefault();
-          Transforms.move(editor, { unit: "line" });
-          return;
+          event.preventDefault()
+          Transforms.move(editor, { unit: 'line' })
+          return
         }
 
         if (Hotkeys.isExtendLineBackward(nativeEvent)) {
-          event.preventDefault();
+          event.preventDefault()
           Transforms.move(editor, {
-            unit: "line",
-            edge: "focus",
+            unit: 'line',
+            edge: 'focus',
             reverse: true,
-          });
-          return;
+          })
+          return
         }
 
         if (Hotkeys.isExtendLineForward(nativeEvent)) {
-          event.preventDefault();
-          Transforms.move(editor, { unit: "line", edge: "focus" });
-          return;
+          event.preventDefault()
+          Transforms.move(editor, { unit: 'line', edge: 'focus' })
+          return
         }
 
         // COMPAT: If a void node is selected, or a zero-width text node
@@ -1311,49 +1367,49 @@ export class SlateEditableComponent
         // the void node with the zero-width space not being an empty
         // string.
         if (Hotkeys.isMoveBackward(nativeEvent)) {
-          event.preventDefault();
+          event.preventDefault()
 
           if (selection && Range.isCollapsed(selection)) {
-            Transforms.move(editor, { reverse: !isRTL });
+            Transforms.move(editor, { reverse: !isRTL })
           } else {
-            Transforms.collapse(editor, { edge: "start" });
+            Transforms.collapse(editor, { edge: 'start' })
           }
 
-          return;
+          return
         }
 
         if (Hotkeys.isMoveForward(nativeEvent)) {
-          event.preventDefault();
+          event.preventDefault()
 
           if (selection && Range.isCollapsed(selection)) {
-            Transforms.move(editor, { reverse: isRTL });
+            Transforms.move(editor, { reverse: isRTL })
           } else {
-            Transforms.collapse(editor, { edge: "end" });
+            Transforms.collapse(editor, { edge: 'end' })
           }
 
-          return;
+          return
         }
 
         if (Hotkeys.isMoveWordBackward(nativeEvent)) {
-          event.preventDefault();
+          event.preventDefault()
 
           if (selection && Range.isExpanded(selection)) {
-            Transforms.collapse(editor, { edge: "focus" });
+            Transforms.collapse(editor, { edge: 'focus' })
           }
 
-          Transforms.move(editor, { unit: "word", reverse: !isRTL });
-          return;
+          Transforms.move(editor, { unit: 'word', reverse: !isRTL })
+          return
         }
 
         if (Hotkeys.isMoveWordForward(nativeEvent)) {
-          event.preventDefault();
+          event.preventDefault()
 
           if (selection && Range.isExpanded(selection)) {
-            Transforms.collapse(editor, { edge: "focus" });
+            Transforms.collapse(editor, { edge: 'focus' })
           }
 
-          Transforms.move(editor, { unit: "word", reverse: isRTL });
-          return;
+          Transforms.move(editor, { unit: 'word', reverse: isRTL })
+          return
         }
 
         // COMPAT: Certain browsers don't support the `beforeinput` event, so we
@@ -1367,92 +1423,92 @@ export class SlateEditableComponent
             Hotkeys.isItalic(nativeEvent) ||
             Hotkeys.isTransposeCharacter(nativeEvent)
           ) {
-            event.preventDefault();
-            return;
+            event.preventDefault()
+            return
           }
 
           if (Hotkeys.isSoftBreak(nativeEvent)) {
-            event.preventDefault();
-            Editor.insertSoftBreak(editor);
-            return;
+            event.preventDefault()
+            Editor.insertSoftBreak(editor)
+            return
           }
 
           if (Hotkeys.isSplitBlock(nativeEvent)) {
-            event.preventDefault();
-            Editor.insertBreak(editor);
-            return;
+            event.preventDefault()
+            Editor.insertBreak(editor)
+            return
           }
 
           if (Hotkeys.isDeleteBackward(nativeEvent)) {
-            event.preventDefault();
+            event.preventDefault()
 
             if (selection && Range.isExpanded(selection)) {
-              Editor.deleteFragment(editor, { direction: "backward" });
+              Editor.deleteFragment(editor, { direction: 'backward' })
             } else {
-              Editor.deleteBackward(editor);
+              Editor.deleteBackward(editor)
             }
 
-            return;
+            return
           }
 
           if (Hotkeys.isDeleteForward(nativeEvent)) {
-            event.preventDefault();
+            event.preventDefault()
 
             if (selection && Range.isExpanded(selection)) {
-              Editor.deleteFragment(editor, { direction: "forward" });
+              Editor.deleteFragment(editor, { direction: 'forward' })
             } else {
-              Editor.deleteForward(editor);
+              Editor.deleteForward(editor)
             }
 
-            return;
+            return
           }
 
           if (Hotkeys.isDeleteLineBackward(nativeEvent)) {
-            event.preventDefault();
+            event.preventDefault()
 
             if (selection && Range.isExpanded(selection)) {
-              Editor.deleteFragment(editor, { direction: "backward" });
+              Editor.deleteFragment(editor, { direction: 'backward' })
             } else {
-              Editor.deleteBackward(editor, { unit: "line" });
+              Editor.deleteBackward(editor, { unit: 'line' })
             }
 
-            return;
+            return
           }
 
           if (Hotkeys.isDeleteLineForward(nativeEvent)) {
-            event.preventDefault();
+            event.preventDefault()
 
             if (selection && Range.isExpanded(selection)) {
-              Editor.deleteFragment(editor, { direction: "forward" });
+              Editor.deleteFragment(editor, { direction: 'forward' })
             } else {
-              Editor.deleteForward(editor, { unit: "line" });
+              Editor.deleteForward(editor, { unit: 'line' })
             }
 
-            return;
+            return
           }
 
           if (Hotkeys.isDeleteWordBackward(nativeEvent)) {
-            event.preventDefault();
+            event.preventDefault()
 
             if (selection && Range.isExpanded(selection)) {
-              Editor.deleteFragment(editor, { direction: "backward" });
+              Editor.deleteFragment(editor, { direction: 'backward' })
             } else {
-              Editor.deleteBackward(editor, { unit: "word" });
+              Editor.deleteBackward(editor, { unit: 'word' })
             }
 
-            return;
+            return
           }
 
           if (Hotkeys.isDeleteWordForward(nativeEvent)) {
-            event.preventDefault();
+            event.preventDefault()
 
             if (selection && Range.isExpanded(selection)) {
-              Editor.deleteFragment(editor, { direction: "forward" });
+              Editor.deleteFragment(editor, { direction: 'forward' })
             } else {
-              Editor.deleteForward(editor, { unit: "word" });
+              Editor.deleteForward(editor, { unit: 'word' })
             }
 
-            return;
+            return
           }
         } else {
           if (IS_CHROME || IS_SAFARI) {
@@ -1464,46 +1520,50 @@ export class SlateEditableComponent
                 Hotkeys.isDeleteForward(nativeEvent)) &&
               Range.isCollapsed(selection)
             ) {
-              const currentNode = Node.parent(editor, selection.anchor.path);
+              const currentNode = Node.parent(
+                editor,
+                selection.anchor.path
+              )
 
               if (
                 Element.isElement(currentNode) &&
                 Editor.isVoid(editor, currentNode) &&
                 Editor.isInline(editor, currentNode)
               ) {
-                event.preventDefault();
-                Editor.deleteBackward(editor, { unit: "block" });
+                event.preventDefault()
+                Editor.deleteBackward(editor, { unit: 'block' })
 
-                return;
+                return
               }
             }
           }
         }
-      } catch (error) {
-        this.editor.onError({
-          code: SlateErrorCode.OnDOMKeydownError,
-          nativeError: error,
-        });
       }
+    } catch (error) {
+      this.editor.onError({
+        code: SlateErrorCode.OnDOMKeydownError,
+        nativeError: error,
+      });
     }
   }
 
   private onDOMPaste(event: ClipboardEvent) {
-    // COMPAT: Certain browsers don't support the `beforeinput` event, so we
-    // fall back to React's `onPaste` here instead.
-    // COMPAT: Firefox, Chrome and Safari are not emitting `beforeinput` events
-    // when "paste without formatting" option is used.
-    // This unfortunately needs to be handled with paste events instead.
     if (
-      !this.isDOMEventHandled(event, this.paste) &&
-      (!HAS_BEFORE_INPUT_SUPPORT ||
-        isPlainTextOnlyPaste(event) ||
-        forceOnDOMPaste) &&
       !this.readonly &&
-      hasEditableTarget(this.editor, event.target)
+      hasEditableTarget(this.editor, event.target) &&
+      !this.isDOMEventHandled(event, this.paste)
     ) {
-      event.preventDefault();
-      AngularEditor.insertData(this.editor, event.clipboardData);
+      // COMPAT: Certain browsers don't support the `beforeinput` event, so we
+      // fall back to React's `onPaste` here instead.
+      // COMPAT: Firefox, Chrome and Safari don't emit `beforeinput` events
+      // when "paste without formatting" is used, so fallback. (2020/02/20)
+      if (
+        !HAS_BEFORE_INPUT_SUPPORT ||
+        isPlainTextOnlyPaste(event)
+      ) {
+        event.preventDefault()
+        AngularEditor.insertData(this.editor, event.clipboardData)
+      }
     }
   }
 
