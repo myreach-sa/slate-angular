@@ -1,4 +1,9 @@
-<restore-dom-component [editor]="editor" [receivedUserInput]="receivedUserInput">
+<restore-dom-component
+    [editor]="editor"
+    [receivedUserInput]="receivedUserInput"
+    [context]="context"
+    [viewContext]="viewContext"
+>
     
     <slate-children
         [children]="editor.children"

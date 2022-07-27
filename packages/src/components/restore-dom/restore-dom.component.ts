@@ -1,12 +1,6 @@
-import {
-  AfterContentInit,
-  Component,
-  ElementRef,
-  Input,
-  OnDestroy,
-} from "@angular/core";
-import { RefObject } from "../../types/react-workaround";
+import { Component, ElementRef, Input, OnDestroy } from "@angular/core";
 import { AngularEditor } from "../../plugins/angular-editor";
+import { RefObject } from "../../types/react-workaround";
 import { SlateChildrenContext, SlateViewContext } from "../../view/context";
 import {
   createRestoreDomManager,
@@ -26,27 +20,49 @@ const MUTATION_OBSERVER_CONFIG: MutationObserverInit = {
     <ng-content></ng-content>
   `,
 })
-export class RestoreDOMComponent implements AfterContentInit, OnDestroy {
-  @Input() editor: AngularEditor;
-  @Input() receivedUserInput: RefObject<boolean>;
+export class RestoreDOMComponent implements OnDestroy {
+  @Input()
+  public editor: AngularEditor;
 
-  viewContext: SlateViewContext;
-  context: SlateChildrenContext;
+  private _receivedUserInput: RefObject<boolean>;
+
+  @Input()
+  public set receivedUserInput(receivedUserInput: RefObject<boolean>) {
+    if (receivedUserInput) {
+      this._receivedUserInput = receivedUserInput;
+      this.init();
+    }
+  }
+
+  public get receivedUserInput(): RefObject<boolean> {
+    return this._receivedUserInput;
+  }
+
+  @Input()
+  public viewContext: SlateViewContext;
+
+  @Input()
+  public context: SlateChildrenContext;
 
   private manager: RestoreDOMManager | null = null;
   private mutationObserver: MutationObserver | null = null;
 
+  private _init = false;
+
   constructor(private readonly elementRef: ElementRef<HTMLElement>) {}
 
-  ngAfterContentInit(): void {
-    const editor = this.editor;
+  public init(): void {
+    if (this._init === false) {
+      this._init = true;
+      const editor = this.editor;
 
-    this.manager = createRestoreDomManager(editor, this.receivedUserInput);
-    this.mutationObserver = new MutationObserver(
-      this.manager.registerMutations
-    );
+      this.manager = createRestoreDomManager(editor, this.receivedUserInput);
+      this.mutationObserver = new MutationObserver(
+        this.manager.registerMutations
+      );
 
-    this.observe();
+      this.observe();
+    }
   }
 
   ngOnDestroy(): void {

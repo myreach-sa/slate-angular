@@ -32,6 +32,8 @@ import { IS_CHROME, IS_FIREFOX } from "../utils/environment";
 import { Key } from "../utils/key";
 import {
   EDITOR_TO_ELEMENT,
+  EDITOR_TO_PENDING_DIFFS,
+  EDITOR_TO_SCHEDULE_FLUSH,
   EDITOR_TO_WINDOW,
   ELEMENT_TO_NODE,
   IS_COMPOSING,
@@ -252,7 +254,7 @@ export const AngularEditor = {
   ): boolean {
     const { editable = false } = options;
     const editorEl = AngularEditor.toDOMNode(editor, editor);
-    let targetEl;
+    let targetEl: HTMLElement;
 
     // COMPAT: In Firefox, reading `target.nodeType` will throw an error if
     // target is originating from an internal "restricted" element (e.g. a
@@ -864,5 +866,19 @@ export const AngularEditor = {
     return (
       Editor.hasPath(editor, anchor.path) && Editor.hasPath(editor, focus.path)
     );
+  },
+
+  /**
+   * Experimental and android specific: Flush all pending diffs and cancel composition at the next possible time.
+   */
+  androidScheduleFlush(editor: Editor) {
+    EDITOR_TO_SCHEDULE_FLUSH.get(editor)?.();
+  },
+
+  /**
+   * Experimental and android specific: Get pending diffs
+   */
+  androidPendingDiffs(editor: Editor) {
+    return EDITOR_TO_PENDING_DIFFS.get(editor);
   },
 };

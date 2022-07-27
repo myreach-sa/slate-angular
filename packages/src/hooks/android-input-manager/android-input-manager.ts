@@ -14,9 +14,9 @@ import {
 import { isDOMSelection, isTrackedMutation } from "../../utils/dom";
 import {
   EDITOR_TO_FORCE_RENDER,
-  EDITOR_TO_MARK_PLACEHOLDER_MARKS,
   EDITOR_TO_PENDING_ACTION,
   EDITOR_TO_PENDING_DIFFS,
+  EDITOR_TO_PENDING_INSERTION_MARKS,
   EDITOR_TO_PENDING_SELECTION,
   EDITOR_TO_PLACEHOLDER_ELEMENT,
   EDITOR_TO_USER_MARKS,
@@ -172,11 +172,11 @@ export function createAndroidInputManager({
 
     let diff: TextDiff | undefined;
     while ((diff = EDITOR_TO_PENDING_DIFFS.get(editor)?.[0])) {
-      const placeholderMarks = EDITOR_TO_MARK_PLACEHOLDER_MARKS.get(editor);
+      const pendingMarks = EDITOR_TO_PENDING_INSERTION_MARKS.get(editor);
 
-      if (placeholderMarks) {
-        EDITOR_TO_MARK_PLACEHOLDER_MARKS.delete(editor);
-        editor.marks = placeholderMarks;
+      if (pendingMarks !== undefined) {
+        EDITOR_TO_PENDING_INSERTION_MARKS.delete(editor);
+        editor.marks = pendingMarks;
         isInsertAfterMarkPlaceholder = true;
       }
 
@@ -212,6 +212,7 @@ export function createAndroidInputManager({
         EDITOR_TO_PENDING_SELECTION.delete(editor);
         scheduleOnDOMSelectionChange.cancel();
         onDOMSelectionChange.cancel();
+        selectionRef?.unref();
       }
     }
 
@@ -281,7 +282,7 @@ export function createAndroidInputManager({
       return;
     }
 
-    delete placeholderElement.style.visibility;
+    placeholderElement.style.removeProperty("visibility");
   };
 
   const storeDiff = (path: Path, diff: StringDiff) => {
@@ -325,7 +326,7 @@ export function createAndroidInputManager({
     onDOMSelectionChange.cancel();
 
     if (hasPendingAction()) {
-      throw new Error("Scheduled new action while current action is pending");
+      flush();
     }
 
     EDITOR_TO_PENDING_ACTION.set(editor, { at, run });
@@ -528,7 +529,7 @@ export function createAndroidInputManager({
 
         // COMPAT: If we are writing inside a placeholder, the ime inserts the text inside
         // the placeholder itself and thus includes the zero-width space inside edit events.
-        if (EDITOR_TO_MARK_PLACEHOLDER_MARKS.get(editor)) {
+        if (EDITOR_TO_PENDING_INSERTION_MARKS.get(editor)) {
           text = text.replace("\uFEFF", "");
         }
 
@@ -609,6 +610,7 @@ export function createAndroidInputManager({
 
   const handleDomMutations = (mutations: MutationRecord[]) => {
     if (hasPendingDiffs() || hasPendingAction()) {
+      applyPendingSelection();
       return;
     }
 

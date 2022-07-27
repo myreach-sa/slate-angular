@@ -13,7 +13,11 @@ import {
   isDOMText,
   getPlainText,
   Key,
-  getSlateFragmentAttribute
+  getSlateFragmentAttribute,
+  EDITOR_TO_SCHEDULE_FLUSH,
+  EDITOR_TO_PENDING_INSERTION_MARKS,
+  EDITOR_TO_PENDING_DIFFS,
+  EDITOR_TO_USER_MARKS
 } from '../utils';
 import { AngularEditor } from './angular-editor';
 import { SlateError } from '../types/error';
@@ -21,7 +25,39 @@ import { findCurrentLineRange } from '../utils/lines';
 
 export const withAngular = <T extends Editor>(editor: T, clipboardFormatKey = 'x-slate-fragment') => {
   const e = editor as T & AngularEditor;
-  const { apply, onChange, deleteBackward } = e;
+  const { apply, onChange, deleteBackward, addMark, removeMark } = e;
+
+  e.addMark = (key, value) => {
+    EDITOR_TO_SCHEDULE_FLUSH.get(e)?.()
+
+    if (
+      !EDITOR_TO_PENDING_INSERTION_MARKS.get(e) &&
+      EDITOR_TO_PENDING_DIFFS.get(e)?.length
+    ) {
+      // Ensure the current pending diffs originating from changes before the addMark
+      // are applied with the current formatting
+      EDITOR_TO_PENDING_INSERTION_MARKS.set(e, null)
+    }
+
+    EDITOR_TO_USER_MARKS.delete(editor)
+
+    addMark(key, value)
+  }
+
+  e.removeMark = key => {
+    if (
+      !EDITOR_TO_PENDING_INSERTION_MARKS.get(e) &&
+      EDITOR_TO_PENDING_DIFFS.get(e)?.length
+    ) {
+      // Ensure the current pending diffs originating from changes before the addMark
+      // are applied with the current formatting
+      EDITOR_TO_PENDING_INSERTION_MARKS.set(e, null)
+    }
+
+    EDITOR_TO_USER_MARKS.delete(editor)
+
+    removeMark(key)
+  }
 
   e.deleteBackward = unit => {
     if (unit !== 'line') {

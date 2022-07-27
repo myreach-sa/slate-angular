@@ -4,12 +4,12 @@ import {
   Component,
   ElementRef,
   forwardRef,
+  HostBinding,
   HostListener,
   Input,
   OnChanges,
   OnInit,
   SimpleChanges,
-  SkipSelf,
   ViewChild,
 } from "@angular/core";
 import { NG_VALUE_ACCESSOR } from "@angular/forms";
@@ -33,11 +33,7 @@ import {
   SlatePlaceholder,
   ViewType,
 } from "slate-angular/types";
-import {
-  check,
-  isDecoratorRangeListEqual,
-  normalize,
-} from "slate-angular/utils";
+import { check, normalize } from "slate-angular/utils";
 import { TRIPLE_CLICK } from "slate-angular/utils/constants";
 import {
   HAS_BEFORE_INPUT_SUPPORT,
@@ -70,7 +66,7 @@ import {
 import Hotkeys from "../../utils/hotkeys";
 import {
   EDITOR_TO_ELEMENT,
-  EDITOR_TO_MARK_PLACEHOLDER_MARKS,
+  EDITOR_TO_PENDING_INSERTION_MARKS,
   EDITOR_TO_USER_MARKS,
   EDITOR_TO_USER_SELECTION,
   EDITOR_TO_WINDOW,
@@ -80,7 +76,6 @@ import {
   IS_READ_ONLY,
   MARK_PLACEHOLDER_SYMBOL,
   NODE_TO_ELEMENT,
-  PLACEHOLDER_SYMBOL,
 } from "../../utils/weak-maps";
 import { SlateStringTemplateComponent } from "../string/template.component";
 
@@ -93,6 +88,7 @@ interface EditableState {
   hasMarkPlaceholder: boolean;
 }
 
+// https://github.com/sliteteam/slate-1/tree/working-android-input
 @Component({
   selector: "slate-editable-2",
   host: {
@@ -192,6 +188,25 @@ export class Editable2Component implements OnInit, OnChanges {
   @Input()
   public onKeydown: (event: KeyboardEvent) => void;
 
+  //#region DOM attr
+  @Input()
+  public spellCheck = false;
+
+  @Input()
+  public autoCorrect = false;
+
+  @Input()
+  public autoCapitalize = false;
+
+  @HostBinding('attr.data-slate-editor')
+  public dataSlateEditor = true;
+
+  @HostBinding('attr.data-slate-node')
+  public dataSlateNode = 'value';
+
+  @HostBinding('attr.data-gramm')
+  public dataGramm = false;
+  
   @ViewChild("templateComponent", { static: true })
   templateComponent: SlateStringTemplateComponent;
 
@@ -244,6 +259,7 @@ export class Editable2Component implements OnInit, OnChanges {
     const { onUserInput, receivedUserInput, onReRender } = useTrackUserInput(
       this.editor
     );
+
     this.onUserInput = onUserInput;
     this.receivedUserInput = receivedUserInput;
     this.onReRender = onReRender;
@@ -263,12 +279,14 @@ export class Editable2Component implements OnInit, OnChanges {
     this.initializeContext();
 
     this.isomorphicLayoutEffect();
+
+    this.cdRef.detectChanges();
   }
 
   ngOnChanges(simpleChanges: SimpleChanges) {
-    setTimeout(() =>
-      EDITOR_TO_MARK_PLACEHOLDER_MARKS.set(this.editor, this.editor.marks)
-    );
+    setTimeout(() => {
+      EDITOR_TO_PENDING_INSERTION_MARKS.set(this.editor, this.editor.marks);
+    });
 
     // The autoFocus TextareaHTMLAttribute doesn't do anything on a div, so it
     // needs to be manually focused.
@@ -315,7 +333,7 @@ export class Editable2Component implements OnInit, OnChanges {
     clearTimeout(this._onSelectionChangeHandlerTimer);
   }
 
-  @HostListener("selectionchange", [])
+  @HostListener("document:selectionchange", [])
   public onSelectionChangeHandler(): void {
     this.onSelectionChangeHandlerFlush();
     const now = performance.now();
@@ -386,7 +404,7 @@ export class Editable2Component implements OnInit, OnChanges {
     }
   }
 
-  @HostListener("beforeinput", ['$event'])
+  @HostListener("beforeinput", ["$event"])
   public onBeforeInputHandler(event: InputEvent): void {
     this.onUserInput();
 
@@ -833,8 +851,8 @@ export class Editable2Component implements OnInit, OnChanges {
         !IS_UC_MOBILE &&
         event.data
       ) {
-        const placeholderMarks = EDITOR_TO_MARK_PLACEHOLDER_MARKS.get(editor);
-        EDITOR_TO_MARK_PLACEHOLDER_MARKS.delete(editor);
+        const placeholderMarks = EDITOR_TO_PENDING_INSERTION_MARKS.get(editor);
+        EDITOR_TO_PENDING_INSERTION_MARKS.delete(editor);
 
         // Ensure we insert text with the marks the user was actually seeing
         if (placeholderMarks !== undefined) {
@@ -1544,30 +1562,41 @@ export class Editable2Component implements OnInit, OnChanges {
   }
 
   private generateDecorations() {
+    const editor = this.editor;
+    const state = this.state;
+
     const decorations = this.decorate([this.editor, []]);
     const placeholderDecorations = this.isComposing
       ? []
       : this.composePlaceholderDecorate(this.editor);
     decorations.push(...placeholderDecorations);
-    return decorations;
-  }
 
-  private detectContext() {
-    const decorations = this.generateDecorations();
-    if (
-      this.context.selection !== this.editor.selection ||
-      this.context.decorate !== this.decorate ||
-      this.context.readonly !== this.readOnly ||
-      !isDecoratorRangeListEqual(this.context.decorations, decorations)
-    ) {
-      this.context = {
-        parent: this.editor,
-        selection: this.editor.selection,
-        decorations: decorations,
-        decorate: this.decorate,
-        readonly: this.readOnly,
-      };
+    const { marks } = editor;
+    state.hasMarkPlaceholder = false;
+    if (editor.selection && Range.isCollapsed(editor.selection) && marks) {
+      const { anchor } = editor.selection;
+      const { text, ...rest } = Node.leaf(editor, anchor.path);
+      if (!Text.equals(rest as Text, marks as Text, { loose: true })) {
+        state.hasMarkPlaceholder = true;
+        const unset = Object.keys(rest)
+          .map((mark) => [mark, null])
+          .reduce((acc, cur) => {
+            return {
+              ...acc,
+              [cur[0]]: cur[1],
+            };
+          }, {});
+        decorations.push({
+          [MARK_PLACEHOLDER_SYMBOL]: true,
+          ...unset,
+          ...marks,
+          anchor,
+          focus: anchor,
+        });
+      }
     }
+
+    return decorations;
   }
 
   private initializeViewContext() {
