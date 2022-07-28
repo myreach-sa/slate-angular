@@ -7,12 +7,15 @@ import { ViewContainer } from "../../view/container";
 
 @Component({
     selector: 'slate-children',
-    template: `<slate-descendant 
-                    [descendant]="descendant"
-                    [context]="context" [viewContext]="viewContext"
-                    [viewContext]="viewContext"
-                    [index]="index"
-                    *ngFor="let descendant of children;let index = index; trackBy: trackBy"></slate-descendant>`,
+    template: `
+    <slate-descendant 
+        *ngFor="let descendant of children;let index = index; trackBy: trackBy"
+        [descendant]="descendant"
+        [context]="context" [viewContext]="viewContext"
+        [viewContext]="viewContext"
+        [index]="index"
+    ></slate-descendant>
+    `,
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class SlateChildrenComponent extends ViewContainer<SlateDescendantComponent> implements OnInit {

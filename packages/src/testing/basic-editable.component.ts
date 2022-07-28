@@ -1,6 +1,6 @@
 import { Component, ViewChild } from "@angular/core";
 import { createEditor, Element } from "slate";
-import { Editable2Component } from "slate-angular/components/editable2/editable2.component";
+import { Editable2Component } from "slate-angular/components/editable/editable.component";
 import { withAngular } from "../plugins/with-angular";
 import { createDefaultDocument } from "./create-document";
 
@@ -11,7 +11,7 @@ import { createDefaultDocument } from "./create-document";
             [editor]="editor"
             [(ngModel)]="value"
             (ngModelChange)="ngModelChange()"
-        ></slate-editable>
+        ></slate-editable-2>
     `
 })
 export class BasicEditableComponent {

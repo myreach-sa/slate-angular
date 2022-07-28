@@ -15,6 +15,9 @@ import {
   FAKE_LEFT_BLOCK_CARD_OFFSET,
   FAKE_RIGHT_BLOCK_CARD_OFFSET,
   getCardTargetAttribute,
+  isCardCenterByTargetAttr,
+  isCardLeftByTargetAttr,
+  isCardRightByTargetAttr,
 } from "../utils/block-card";
 import {
   DOMElement,
@@ -28,7 +31,7 @@ import {
   isDOMSelection,
   normalizeDOMPoint,
 } from "../utils/dom";
-import { IS_CHROME, IS_FIREFOX } from "../utils/environment";
+import { IS_ANDROID, IS_CHROME, IS_FIREFOX } from "../utils/environment";
 import { Key } from "../utils/key";
 import {
   EDITOR_TO_ELEMENT,
@@ -555,6 +558,142 @@ export const AngularEditor = {
     return range;
   },
 
+  toSlatePointOld<T extends boolean>(
+    editor: AngularEditor,
+    domPoint: DOMPoint,
+    options: {
+      exactMatch: T;
+      suppressThrow: T;
+    }
+  ): T extends true ? Point | null : Point {
+    const [domNode] = domPoint;
+    const [nearestNode, nearestOffset] = normalizeDOMPoint(domPoint);
+    let parentNode = nearestNode.parentNode as DOMElement;
+    let textNode: DOMElement | null = null;
+    let offset = 0;
+
+    // block card
+    const cardTargetAttr = getCardTargetAttribute(domNode);
+    if (cardTargetAttr) {
+      const domSelection = window.getSelection();
+      const isBackward = editor.selection && Range.isBackward(editor.selection);
+      const blockCardEntry =
+        AngularEditor.toSlateCardEntry(editor, domNode) ||
+        AngularEditor.toSlateCardEntry(editor, nearestNode);
+      const [, blockPath] = blockCardEntry;
+      if (domSelection.isCollapsed) {
+        if (isCardLeftByTargetAttr(cardTargetAttr)) {
+          return { path: blockPath, offset: -1 };
+        } else {
+          return { path: blockPath, offset: -2 };
+        }
+      }
+      // forward
+      // and to the end of previous node
+      if (isCardLeftByTargetAttr(cardTargetAttr) && !isBackward) {
+        const endPath =
+          blockPath[blockPath.length - 1] <= 0
+            ? blockPath
+            : Path.previous(blockPath);
+        return Editor.end(editor, endPath);
+      }
+      // to the of current node
+      if (
+        (isCardCenterByTargetAttr(cardTargetAttr) ||
+          isCardRightByTargetAttr(cardTargetAttr)) &&
+        !isBackward
+      ) {
+        return Editor.end(editor, blockPath);
+      }
+      // backward
+      // and to the start of next node
+      if (isCardRightByTargetAttr(cardTargetAttr) && isBackward) {
+        return Editor.start(editor, Path.next(blockPath));
+      }
+      // and to the start of current node
+      if (
+        (isCardCenterByTargetAttr(cardTargetAttr) ||
+          isCardLeftByTargetAttr(cardTargetAttr)) &&
+        isBackward
+      ) {
+        return Editor.start(editor, blockPath);
+      }
+    }
+
+    if (parentNode) {
+      const voidNode = parentNode.closest('[data-slate-void="true"]');
+      let leafNode = parentNode.closest("[data-slate-leaf]");
+      let domNode: DOMElement | null = null;
+
+      // Calculate how far into the text node the `nearestNode` is, so that we
+      // can determine what the offset relative to the text node is.
+      if (leafNode) {
+        textNode = leafNode.closest('[data-slate-node="text"]')!;
+        const window = AngularEditor.getWindow(editor);
+        const range = window.document.createRange();
+        range.setStart(textNode, 0);
+        range.setEnd(nearestNode, nearestOffset);
+        const contents = range.cloneContents();
+        const removals = [
+          ...Array.prototype.slice.call(
+            contents.querySelectorAll("[data-slate-zero-width]")
+          ),
+          ...Array.prototype.slice.call(
+            contents.querySelectorAll("[contenteditable=false]")
+          ),
+        ];
+
+        removals.forEach((el) => {
+          el!.parentNode!.removeChild(el);
+        });
+
+        // COMPAT: Edge has a bug where Range.prototype.toString() will
+        // convert \n into \r\n. The bug causes a loop when slate-react
+        // attempts to reposition its cursor to match the native position. Use
+        // textContent.length instead.
+        // https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/10291116/
+        offset = contents.textContent!.length;
+        domNode = textNode;
+      } else if (voidNode) {
+        // For void nodes, the element with the offset key will be a cousin, not an
+        // ancestor, so find it by going down from the nearest void parent.
+
+        leafNode = voidNode.querySelector("[data-slate-leaf]")!;
+        parentNode = voidNode.querySelector('[data-slate-length="0"]');
+        textNode = leafNode.closest('[data-slate-node="text"]')!;
+        domNode = leafNode;
+        offset = domNode.textContent!.length;
+      }
+
+      // COMPAT: If the parent node is a Slate zero-width space, editor is
+      // because the text node should have no characters. However, during IME
+      // composition the ASCII characters will be prepended to the zero-width
+      // space, so subtract 1 from the offset to account for the zero-width
+      // space character.
+      if (
+        domNode &&
+        offset === domNode.textContent!.length &&
+        parentNode &&
+        parentNode.hasAttribute("data-slate-zero-width")
+      ) {
+        offset--;
+      }
+    }
+
+    if (!textNode) {
+      throw new Error(
+        `Cannot resolve a Slate point from DOM point: ${domPoint}`
+      );
+    }
+
+    // COMPAT: If someone is clicking from one Slate editor into another,
+    // the select event fires twice, once for the old editor's `element`
+    // first, and then afterwards for the correct `element`. (2017/03/03)
+    const slateNode = AngularEditor.toSlateNode(editor, textNode!);
+    const path = AngularEditor.findPath(editor, slateNode);
+    return { path, offset };
+  },
+
   /**
    * Find a Slate point from a DOM selection's `domNode` and `domOffset`.
    */
@@ -611,6 +750,22 @@ export const AngularEditor = {
           ];
 
           removals.forEach((el) => {
+            // COMPAT: While composing at the start of a text node, some keyboards put
+            // the text content inside the zero width space.
+            if (
+              IS_ANDROID &&
+              !exactMatch &&
+              el.hasAttribute("data-slate-zero-width") &&
+              el.textContent.length > 0 &&
+              el.textContext !== "\uFEFF"
+            ) {
+              if (el.textContent.startsWith("\uFEFF")) {
+                el.textContent = el.textContent.slice(1);
+              }
+
+              return;
+            }
+
             el!.parentNode!.removeChild(el);
           });
 
@@ -640,9 +795,16 @@ export const AngularEditor = {
         }
       }
 
+      console.log("DEBUG toSlatePoint", { parentNode, voidNode, leafNode, domNode, offset });
+
       if (
         domNode &&
         offset === domNode.textContent!.length &&
+        // COMPAT: Android IMEs might remove the zero width space while composing,
+        // and we don't add it for line-breaks.
+        IS_ANDROID &&
+        domNode.getAttribute("data-slate-zero-width") === "z" &&
+        domNode.textContent?.startsWith("\uFEFF") &&
         // COMPAT: If the parent node is a Slate zero-width space, editor is
         // because the text node should have no characters. However, during IME
         // composition the ASCII characters will be prepended to the zero-width
@@ -655,6 +817,26 @@ export const AngularEditor = {
           (IS_FIREFOX && domNode.textContent?.endsWith("\n\n")))
       ) {
         offset--;
+      }
+    }
+
+    if (IS_ANDROID && !textNode && !exactMatch) {
+      const node = parentNode.hasAttribute("data-slate-node")
+        ? parentNode
+        : parentNode.closest("[data-slate-node]");
+
+      if (node && AngularEditor.hasDOMNode(editor, node, { editable: true })) {
+        const slateNode = AngularEditor.toSlateNode(editor, node);
+        let { path, offset } = Editor.start(
+          editor,
+          AngularEditor.findPath(editor, slateNode)
+        );
+
+        if (!node.querySelector("[data-slate-leaf]")) {
+          offset = nearestOffset;
+        }
+
+        return { path, offset } as T extends true ? Point | null : Point;
       }
     }
 
@@ -687,22 +869,22 @@ export const AngularEditor = {
       suppressThrow: T;
     }
   ): T extends true ? Range | null : Range {
-    const { exactMatch, suppressThrow } = options;
+    const { exactMatch, suppressThrow } = options
     const el = isDOMSelection(domRange)
       ? domRange.anchorNode
-      : domRange.startContainer;
-    let anchorNode;
-    let anchorOffset;
-    let focusNode;
-    let focusOffset;
-    let isCollapsed;
+      : domRange.startContainer
+    let anchorNode: DOMNode;
+    let anchorOffset: number;
+    let focusNode: DOMNode;
+    let focusOffset: number;
+    let isCollapsed: boolean;
 
     if (el) {
       if (isDOMSelection(domRange)) {
-        anchorNode = domRange.anchorNode;
-        anchorOffset = domRange.anchorOffset;
-        focusNode = domRange.focusNode;
-        focusOffset = domRange.focusOffset;
+        anchorNode = domRange.anchorNode
+        anchorOffset = domRange.anchorOffset
+        focusNode = domRange.focusNode
+        focusOffset = domRange.focusOffset
         // COMPAT: There's a bug in chrome that always returns `true` for
         // `isCollapsed` for a Selection that comes from a ShadowRoot.
         // (2020/08/08)
@@ -710,16 +892,16 @@ export const AngularEditor = {
         if (IS_CHROME && hasShadowRoot()) {
           isCollapsed =
             domRange.anchorNode === domRange.focusNode &&
-            domRange.anchorOffset === domRange.focusOffset;
+            domRange.anchorOffset === domRange.focusOffset
         } else {
-          isCollapsed = domRange.isCollapsed;
+          isCollapsed = domRange.isCollapsed
         }
       } else {
-        anchorNode = domRange.startContainer;
-        anchorOffset = domRange.startOffset;
-        focusNode = domRange.endContainer;
-        focusOffset = domRange.endOffset;
-        isCollapsed = domRange.collapsed;
+        anchorNode = domRange.startContainer
+        anchorOffset = domRange.startOffset
+        focusNode = domRange.endContainer
+        focusOffset = domRange.endOffset
+        isCollapsed = domRange.collapsed
       }
     }
 
@@ -731,16 +913,18 @@ export const AngularEditor = {
     ) {
       throw new Error(
         `Cannot resolve a Slate range from DOM range: ${domRange}`
-      );
+      )
     }
+
+    console.log("DEBUG toSlateRange", { domPoint: [anchorNode, anchorOffset] })
 
     const anchor = AngularEditor.toSlatePoint(
       editor,
       [anchorNode, anchorOffset],
       { exactMatch, suppressThrow }
-    );
+    )
     if (!anchor) {
-      return null as T extends true ? Range | null : Range;
+      return null as T extends true ? Range | null : Range
     }
 
     const focus = isCollapsed
@@ -748,12 +932,12 @@ export const AngularEditor = {
       : AngularEditor.toSlatePoint(editor, [focusNode, focusOffset], {
           exactMatch,
           suppressThrow,
-        });
+        })
     if (!focus) {
-      return null as T extends true ? Range | null : Range;
+      return null as T extends true ? Range | null : Range
     }
 
-    let range: Range = { anchor: anchor as Point, focus: focus as Point };
+    let range: Range = { anchor: anchor as Point, focus: focus as Point }
     // if the selection is a hanging range that ends in a void
     // and the DOM focus is an Element
     // (meaning that the selection ends before the element)
@@ -762,12 +946,12 @@ export const AngularEditor = {
       Range.isExpanded(range) &&
       Range.isForward(range) &&
       isDOMElement(focusNode) &&
-      Editor.void(editor, { at: range.focus, mode: "highest" })
+      Editor.void(editor, { at: range.focus, mode: 'highest' })
     ) {
-      range = Editor.unhangRange(editor, range, { voids: true });
+      range = Editor.unhangRange(editor, range, { voids: true })
     }
 
-    return (range as unknown) as T extends true ? Range | null : Range;
+    return (range as unknown) as T extends true ? Range | null : Range
   },
 
   isLeafBlock(editor: AngularEditor, node: Node): boolean {

@@ -10,7 +10,13 @@ import { AngularEditor } from '../../plugins/angular-editor';
 
 @Component({
     selector: 'span[slateVoidText]',
-    template: `<slate-leaves [context]="context" [viewContext]="viewContext" [viewContext]="viewContext"></slate-leaves>`,
+    template: `
+        <slate-leaves
+            [context]="context"
+            [viewContext]="viewContext"
+            [viewContext]="viewContext"
+        ></slate-leaves>
+    `,
     changeDetection: ChangeDetectionStrategy.OnPush,
     host: {
         '[attr.contenteditable]': 'isLeafBlock',
