@@ -6,7 +6,9 @@ import {
   forwardRef,
   HostBinding,
   HostListener,
+  Injector,
   Input,
+  NgZone,
   OnChanges,
   OnInit,
   SimpleChanges,
@@ -68,6 +70,7 @@ import {
 import Hotkeys from "../../utils/hotkeys";
 import {
   EDITOR_TO_ELEMENT,
+  EDITOR_TO_ON_CHANGE,
   EDITOR_TO_PENDING_INSERTION_MARKS,
   EDITOR_TO_USER_MARKS,
   EDITOR_TO_USER_SELECTION,
@@ -222,7 +225,11 @@ export class Editable2Component implements OnInit, OnChanges {
   // #endregion
 
   @ViewChild("templateComponent", { static: true })
-  templateComponent: SlateStringTemplateComponent;
+  private templateComponent: SlateStringTemplateComponent;
+
+
+  @ViewChild('templateComponent', { static: true, read: ElementRef })
+  private templateElementRef: ElementRef<any>;
 
   private isComposing = false;
 
@@ -267,14 +274,35 @@ export class Editable2Component implements OnInit, OnChanges {
     }
   }
 
+  private onChange(): void {
+    this.onChangeCallback(this.editor.children);
+  }
+
   constructor(
     private readonly elementRef: ElementRef<HTMLElement>,
-    private readonly cdRef: ChangeDetectorRef
+    private readonly cdRef: ChangeDetectorRef,
+    private readonly ngZone: NgZone,
+    private readonly injector: Injector
   ) {}
 
   ngOnInit(): void {
     const editor = this.editor;
     const state = this.state;
+
+    editor.injector = this.injector;
+    editor.children = [];
+    let window = getDefaultView(this.elementRef.nativeElement);
+
+    EDITOR_TO_WINDOW.set(editor, window);
+    EDITOR_TO_ELEMENT.set(editor, this.elementRef.nativeElement);
+    NODE_TO_ELEMENT.set(editor, this.elementRef.nativeElement);
+    ELEMENT_TO_NODE.set(this.elementRef.nativeElement, editor);
+    IS_READ_ONLY.set(editor, this.readOnly);
+    EDITOR_TO_ON_CHANGE.set(editor, () => {
+      this.ngZone.run(() => {
+        this.onChange();
+      });
+    });
 
     const { onUserInput, receivedUserInput, onReRender } = useTrackUserInput(
       editor
@@ -283,11 +311,6 @@ export class Editable2Component implements OnInit, OnChanges {
     this.onUserInput = onUserInput;
     this.receivedUserInput = receivedUserInput;
     this.onReRender = onReRender;
-
-    // const [, forceRender] = useReducer(s => s + 1, 0)
-    // EDITOR_TO_FORCE_RENDER.set(editor, forceRender)
-
-    IS_READ_ONLY.set(editor, this.readOnly);
 
     this.androidInputManager = useAndroidInputManager(editor, {
       node: this.elementRef.nativeElement,
@@ -345,6 +368,13 @@ export class Editable2Component implements OnInit, OnChanges {
 
     this.initializeViewContext();
     this.initializeContext();
+
+    // remove unused DOM, just keep templateComponent instance
+    this.templateElementRef.nativeElement.remove();
+
+    // add browser class
+    let browserClass = IS_FIREFOX ? "firefox" : IS_SAFARI ? "safari" : "";
+    browserClass && this.elementRef.nativeElement.classList.add(browserClass);
 
     this.isomorphicLayoutEffect();
   }
@@ -435,13 +465,6 @@ export class Editable2Component implements OnInit, OnChanges {
         EditableUtils.isTargetInsideNonReadonlyVoid(editor, focusNode);
 
       if (anchorNodeSelectable && focusNodeSelectable) {
-        console.log("DEBUG onSelectionChangeHandlerInner", {
-          editor,
-          anchorNodeSelectable,
-          focusNodeSelectable,
-          domSelection,
-        });
-
         const range = AngularEditor.toSlateRange(editor, domSelection, {
           exactMatch: false,
           suppressThrow: true,
@@ -1654,6 +1677,16 @@ export class Editable2Component implements OnInit, OnChanges {
     return decorations;
   }
 
+  private initializeContext() {
+    this.context = {
+      parent: this.editor,
+      selection: this.editor.selection,
+      decorations: this.generateDecorations(),
+      decorate: this.decorate,
+      readonly: this.readOnly,
+    };
+  }
+
   private initializeViewContext() {
     this.viewContext = {
       editor: this.editor,
@@ -1663,16 +1696,6 @@ export class Editable2Component implements OnInit, OnChanges {
       trackBy: this.trackBy,
       isStrictDecorate: this.isStrictDecorate,
       templateComponent: this.templateComponent,
-    };
-  }
-
-  private initializeContext() {
-    this.context = {
-      parent: this.editor,
-      selection: this.editor.selection,
-      decorations: this.generateDecorations(),
-      decorate: this.decorate,
-      readonly: this.readOnly,
     };
   }
 }

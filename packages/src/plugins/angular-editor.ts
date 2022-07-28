@@ -795,8 +795,6 @@ export const AngularEditor = {
         }
       }
 
-      console.log("DEBUG toSlatePoint", { parentNode, voidNode, leafNode, domNode, offset });
-
       if (
         domNode &&
         offset === domNode.textContent!.length &&
@@ -915,8 +913,6 @@ export const AngularEditor = {
         `Cannot resolve a Slate range from DOM range: ${domRange}`
       )
     }
-
-    console.log("DEBUG toSlateRange", { domPoint: [anchorNode, anchorOffset] })
 
     const anchor = AngularEditor.toSlatePoint(
       editor,
