@@ -732,7 +732,7 @@ export class Editable2Component implements OnInit, OnChanges {
   }
 
   @HostListener("input", ["$event"])
-  public onInputHandler(event: InputEvent): void {
+  public onInputHandler(_event: InputEvent): void {
     const androidInputManager = this.androidInputManager;
     const deferredOperations = this.deferredOperations;
 
@@ -1203,6 +1203,9 @@ export class Editable2Component implements OnInit, OnChanges {
       const { selection } = editor;
       const element =
         editor.children[selection !== null ? selection.focus.path[0] : 0];
+
+      console.log("DEBUG element", element);
+
       const isRTL = getDirection(Node.string(element)) === "rtl";
 
       // COMPAT: Since we prevent the default behavior on
