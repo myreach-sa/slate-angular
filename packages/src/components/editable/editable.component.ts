@@ -37,7 +37,11 @@ import {
   throttle,
   ViewType,
 } from "slate-angular/types";
-import { check, normalize } from "slate-angular/utils";
+import {
+  check,
+  isDecoratorRangeListEqual,
+  normalize,
+} from "slate-angular/utils";
 import { TRIPLE_CLICK } from "slate-angular/utils/constants";
 import {
   HAS_BEFORE_INPUT_SUPPORT,
@@ -227,8 +231,7 @@ export class Editable2Component implements OnInit, OnChanges {
   @ViewChild("templateComponent", { static: true })
   private templateComponent: SlateStringTemplateComponent;
 
-
-  @ViewChild('templateComponent', { static: true, read: ElementRef })
+  @ViewChild("templateComponent", { static: true, read: ElementRef })
   private templateElementRef: ElementRef<any>;
 
   private isComposing = false;
@@ -404,6 +407,24 @@ export class Editable2Component implements OnInit, OnChanges {
   }
   registerOnTouched(fn: any) {
     this.onTouchedCallback = fn;
+  }
+
+  private detectContext(): void {
+    const decorations = this.generateDecorations();
+    if (
+      this.context.selection !== this.editor.selection ||
+      this.context.decorate !== this.decorate ||
+      this.context.readonly !== this.readOnly ||
+      !isDecoratorRangeListEqual(this.context.decorations, decorations)
+    ) {
+      this.context = {
+        parent: this.editor,
+        selection: this.editor.selection,
+        decorations: decorations,
+        decorate: this.decorate,
+        readonly: this.readOnly,
+      };
+    }
   }
 
   public writeValue(value: Element[]): void {
@@ -948,6 +969,9 @@ export class Editable2Component implements OnInit, OnChanges {
         }
       }
     }
+    
+    this.detectContext();
+    this.cdRef.detectChanges();
   }
 
   @HostListener("compositionUpdate", ["$event"])
@@ -1003,6 +1027,9 @@ export class Editable2Component implements OnInit, OnChanges {
         }
       }
     }
+
+    this.detectContext();
+    this.cdRef.detectChanges();
   }
 
   @HostListener("copy", ["$event"])
