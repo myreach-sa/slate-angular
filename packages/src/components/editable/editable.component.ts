@@ -43,11 +43,7 @@ import {
   throttle,
   ViewType,
 } from "../../types";
-import {
-  check,
-  isDecoratorRangeListEqual,
-  normalize,
-} from "../../utils";
+import { check, isDecoratorRangeListEqual, normalize } from "../../utils";
 import { TRIPLE_CLICK } from "../../utils/constants";
 import {
   HAS_BEFORE_INPUT_SUPPORT,
@@ -61,10 +57,7 @@ import {
   IS_UC_MOBILE,
   IS_WECHATBROWSER,
 } from "../../utils/environment";
-import {
-  SlateChildrenContext,
-  SlateViewContext,
-} from "../../view/context";
+import { SlateChildrenContext, SlateViewContext } from "../../view/context";
 import { AngularEditor } from "../../plugins/angular-editor";
 import { UseRef, useRef } from "../../types/react-workaround";
 import {
@@ -301,17 +294,11 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
 
     editor.injector = this.injector;
     editor.children = [];
-    let window = getDefaultView(this.elementRef.nativeElement);
 
-    EDITOR_TO_WINDOW.set(editor, window);
-    EDITOR_TO_ELEMENT.set(editor, this.elementRef.nativeElement);
-    NODE_TO_ELEMENT.set(editor, this.elementRef.nativeElement);
-    ELEMENT_TO_NODE.set(this.elementRef.nativeElement, editor);
-    IS_READ_ONLY.set(editor, this.readOnly);
-    EDITOR_TO_ON_CHANGE.set(editor, () => {
-      this.ngZone.run(() => {
-        this.onChange();
-      });
+    this.isomorphicLayoutEffect();
+
+    this.ngZone.runOutsideAngular(() => {
+      this.initialize();
     });
 
     const { onUserInput, receivedUserInput, onReRender } = useTrackUserInput(
@@ -328,54 +315,6 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
       scheduleOnDOMSelectionChange: debounce(this.scheduleOnSelectionChange, 0),
     });
 
-    const decorations = this.decorate([editor, []]);
-
-    if (
-      this.placeholder &&
-      editor.children.length === 1 &&
-      Array.from(Node.texts(editor)).length === 1 &&
-      Node.string(editor) === "" &&
-      !this.isComposing
-    ) {
-      const start = Editor.start(editor, []);
-      decorations.push({
-        [PLACEHOLDER_SYMBOL]: true,
-        placeholder: this.placeholder,
-        anchor: start,
-        focus: start,
-      } as any);
-    }
-
-    const { marks } = editor;
-    state.hasMarkPlaceholder = false;
-
-    if (editor.selection && Range.isCollapsed(editor.selection) && marks) {
-      const { anchor } = editor.selection;
-      const { text, ...rest } = Node.leaf(editor, anchor.path);
-
-      if (!Text.equals(rest as Text, marks as Text, { loose: true })) {
-        state.hasMarkPlaceholder = true;
-
-        const unset = Object.keys(rest)
-          .map((mark) => [mark, null])
-          .reduce((acc, cur) => {
-            return {
-              ...acc,
-              [cur[0]]: cur[1],
-            };
-          }, {});
-
-        decorations.push({
-          [MARK_PLACEHOLDER_SYMBOL]: true,
-          ...unset,
-          ...marks,
-
-          anchor,
-          focus: anchor,
-        });
-      }
-    }
-
     this.initializeViewContext();
     this.initializeContext();
 
@@ -385,8 +324,6 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
     // add browser class
     let browserClass = IS_FIREFOX ? "firefox" : IS_SAFARI ? "safari" : "";
     browserClass && this.elementRef.nativeElement.classList.add(browserClass);
-
-    this.isomorphicLayoutEffect();
   }
 
   ngOnChanges(simpleChanges: SimpleChanges) {
@@ -1038,7 +975,7 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
     }
 
     this.detectContext();
-    this.cdRef.detectChanges();
+    this.cdRef.markForCheck();
   }
 
   // @HostListener("compositionUpdate", ["$event"])
@@ -1053,6 +990,9 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
         IS_COMPOSING.set(editor, true);
       }
     }
+
+    this.detectContext();
+    this.cdRef.markForCheck();
   }
 
   // @HostListener("compositionStart", ["$event"])
@@ -1200,6 +1140,9 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
 
       AngularEditor.setFragmentData(editor, event.dataTransfer, "drag");
     }
+
+    this.initializeContext();
+    this.cdRef.detectChanges();
   }
 
   // @HostListener("drop", ["$event"])
@@ -1568,9 +1511,15 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
     let window;
     if (ref.current && (window = getDefaultView(ref.current))) {
       EDITOR_TO_WINDOW.set(editor, window);
-      EDITOR_TO_ELEMENT.set(editor, ref.current);
-      NODE_TO_ELEMENT.set(editor, ref.current);
-      ELEMENT_TO_NODE.set(ref.current, editor);
+      EDITOR_TO_ELEMENT.set(editor, this.elementRef.nativeElement);
+      NODE_TO_ELEMENT.set(editor, this.elementRef.nativeElement);
+      ELEMENT_TO_NODE.set(this.elementRef.nativeElement, editor);
+      IS_READ_ONLY.set(editor, this.readOnly);
+      EDITOR_TO_ON_CHANGE.set(editor, () => {
+        this.ngZone.run(() => {
+          this.onChange();
+        });
+      });
     } else {
       NODE_TO_ELEMENT.delete(editor);
     }

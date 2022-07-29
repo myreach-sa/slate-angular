@@ -368,22 +368,6 @@ export const AngularEditor = {
     const el = AngularEditor.toDOMNode(editor, node);
     let domPoint: DOMPoint | undefined;
 
-    // block card
-    const cardTargetAttr = getCardTargetAttribute(el);
-    if (cardTargetAttr) {
-      if (point.offset === FAKE_LEFT_BLOCK_CARD_OFFSET) {
-        const cursorNode = AngularEditor.getCardCursorNode(editor, node, {
-          direction: "left",
-        });
-        return [cursorNode, 1];
-      } else {
-        const cursorNode = AngularEditor.getCardCursorNode(editor, node, {
-          direction: "right",
-        });
-        return [cursorNode, 1];
-      }
-    }
-
     // If we're inside a void node, force the offset to 0, otherwise the zero
     // width spacing character will result in an incorrect offset of 1
     if (Editor.void(editor, { at: point })) {

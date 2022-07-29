@@ -107,14 +107,6 @@ export abstract class ViewContainerItem<
     const viewType = this.getViewType();
     const context = this.getContext();
 
-    console.log("DEBUG updateView", {
-      viewType,
-      thisViewType: this.viewType,
-      context,
-      if: this.viewType === viewType,
-      componentRef: this.componentRef
-    });
-
     if (this.viewType === viewType) {
       if (this.componentRef) {
         if (this.memoizedContext(this.componentRef.instance.context, context)) {
