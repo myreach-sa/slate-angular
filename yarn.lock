@@ -110,24 +110,12 @@
     "@angular-devkit/architect" "0.1201.4"
     rxjs "6.6.7"
 
-"@angular-devkit/core@12.1.4":
+"@angular-devkit/core@12.1.4", "@angular-devkit/core@~12.1.2":
   version "12.1.4"
   resolved "https://registry.yarnpkg.com/@angular-devkit/core/-/core-12.1.4.tgz#7a5e745918f2099de97367ff917b3b057f6c18e1"
   integrity sha512-KOzGD8JbP/7EeUwPiU5x+fo3ZEQ5R4IVW5WoH92PaO3mdpqXC7UL2MWLct8PUe9il9nqJMvrBMldSSvP9PCT2w==
   dependencies:
     ajv "8.6.0"
-    ajv-formats "2.1.0"
-    fast-json-stable-stringify "2.1.0"
-    magic-string "0.25.7"
-    rxjs "6.6.7"
-    source-map "0.7.3"
-
-"@angular-devkit/core@^12.1.2":
-  version "12.2.18"
-  resolved "https://registry.yarnpkg.com/@angular-devkit/core/-/core-12.2.18.tgz#6c530658b59f625388986fc73e4c4f966269725a"
-  integrity sha512-GDLHGe9HEY5SRS+NrKr14C8aHsRCiBFkBFSSbeohgLgcgSXzZHFoU84nDWrl3KZNP8oqcUSv5lHu6dLcf2fnww==
-  dependencies:
-    ajv "8.6.2"
     ajv-formats "2.1.0"
     fast-json-stable-stringify "2.1.0"
     magic-string "0.25.7"
@@ -143,12 +131,12 @@
     ora "5.4.1"
     rxjs "6.6.7"
 
-"@angular-eslint/builder@12.1.0":
+"@angular-eslint/builder@~12.1.0":
   version "12.1.0"
   resolved "https://registry.yarnpkg.com/@angular-eslint/builder/-/builder-12.1.0.tgz#108c6200334adc3214670e0743a33500f240bcc9"
   integrity sha512-dXHY8ez9G/9DLJQtCyK+0XQ51FH89nP3aEoPazO596ceEbtfybBXpRO6WwRK7SYPw0St/5fylqnt6KiAEt7UIw==
 
-"@angular-eslint/eslint-plugin-template@12.1.0":
+"@angular-eslint/eslint-plugin-template@12.1.0", "@angular-eslint/eslint-plugin-template@~12.1.0":
   version "12.1.0"
   resolved "https://registry.yarnpkg.com/@angular-eslint/eslint-plugin-template/-/eslint-plugin-template-12.1.0.tgz#c7c0d8eace2627222d1930faae25e089a6602932"
   integrity sha512-WU7XYL+0YiznXLnuXvtqU5jgeZvBBkyBpxt/saU+QfZEs+7hIzgYI1kUe6MaAhSNaPZ/qJDLMXuc2ELxRiebTg==
@@ -157,14 +145,14 @@
     aria-query "^4.2.2"
     axobject-query "^2.2.0"
 
-"@angular-eslint/eslint-plugin@12.1.0":
+"@angular-eslint/eslint-plugin@12.1.0", "@angular-eslint/eslint-plugin@~12.1.0":
   version "12.1.0"
   resolved "https://registry.yarnpkg.com/@angular-eslint/eslint-plugin/-/eslint-plugin-12.1.0.tgz#acde77463c54febffbd909b1ec183dc1f0102b74"
   integrity sha512-l/WzdB8KMohKFB6ts3wfiAgdbhf2lxNQ1zKn/E5buDoLCbptHYEZN7eKqUNaQdWoT5mSlAQOGpliiSKuytdHWw==
   dependencies:
     "@typescript-eslint/experimental-utils" "4.23.0"
 
-"@angular-eslint/schematics@12.1.0":
+"@angular-eslint/schematics@~12.1.0":
   version "12.1.0"
   resolved "https://registry.yarnpkg.com/@angular-eslint/schematics/-/schematics-12.1.0.tgz#5e683e006cd4bdcbb780a23c0fc077f6ffcee74c"
   integrity sha512-9nOYao4MNYmAqcBuTjQNt/gk4RmtsHNXoOnPBlpsy6CapD2DWhIL1qEsRVPsjzqpbxvl2b+ZjWE6q/UO3gWH8Q==
@@ -175,7 +163,7 @@
     strip-json-comments "3.1.1"
     tmp "0.2.1"
 
-"@angular-eslint/template-parser@12.1.0":
+"@angular-eslint/template-parser@~12.1.0":
   version "12.1.0"
   resolved "https://registry.yarnpkg.com/@angular-eslint/template-parser/-/template-parser-12.1.0.tgz#c0cfe49932ee3dfa054a2550fb507b39c7436e63"
   integrity sha512-2bAcIZcjlQqoXVdbO+jtFeo+1DEdxXPfabBEvH3ynoMei8oR2nnb3f9tcMtQ7d7ufQLD7hMWBbrVwhAAbsP4+g==
@@ -2428,16 +2416,6 @@ ajv@8.6.0:
   version "8.6.0"
   resolved "https://registry.yarnpkg.com/ajv/-/ajv-8.6.0.tgz#60cc45d9c46a477d80d92c48076d972c342e5720"
   integrity sha512-cnUG4NSBiM4YFBxgZIj/In3/6KX+rQ2l2YPRVcvAMQGWEPKuXoPIhxzwqh31jA3IPbI4qEOp/5ILI4ynioXsGQ==
-  dependencies:
-    fast-deep-equal "^3.1.1"
-    json-schema-traverse "^1.0.0"
-    require-from-string "^2.0.2"
-    uri-js "^4.2.2"
-
-ajv@8.6.2:
-  version "8.6.2"
-  resolved "https://registry.yarnpkg.com/ajv/-/ajv-8.6.2.tgz#2fb45e0e5fcbc0813326c1c3da535d1881bb0571"
-  integrity sha512-9807RlWAgT564wT+DjeyU5OFMPjmzxVobvDFmNAhY+5zD6A2ly3jDp6sgnfyDtlIQ+7H97oc/DGCzzfu9rjw9w==
   dependencies:
     fast-deep-equal "^3.1.1"
     json-schema-traverse "^1.0.0"
