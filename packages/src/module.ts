@@ -14,11 +14,11 @@ import { SlateDefaultLeafComponent } from "./components/leaf/default-leaf.compon
 import { SlateLeavesComponent } from "./components/leaves/leaves.component";
 import { SLATE_DEFAULT_ELEMENT_COMPONENT_TOKEN } from "./components/element/default-element.component.token";
 import { RestoreDOMComponent } from "./components/restore-dom/restore-dom.component";
-import { Editable2Component } from "./components/editable/editable.component";
+import { EditableComponent } from "./components/editable/editable.component";
 
 @NgModule({
   declarations: [
-    Editable2Component,
+    EditableComponent,
     SlateDefaultElementComponent,
     SlateElementComponent,
     SlateVoidTextComponent,
@@ -43,7 +43,7 @@ import { Editable2Component } from "./components/editable/editable.component";
     SlateDefaultTextComponent,
   ],
   exports: [
-    Editable2Component,
+    EditableComponent,
     SlateChildrenComponent,
     SlateElementComponent,
     SlateLeavesComponent,

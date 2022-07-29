@@ -6,10 +6,10 @@ import { SlatePlaceholder, withAngular } from "slate-angular";
     selector: 'demo-placeholder',
     template: `
     <div class="demo-rich-editor-wrapper">
-        <slate-editable-2  class="demo-slate-angular-editor" placeholder="hello world" [editor]="editor" [(ngModel)]="value"></slate-editable-2>
+        <slate-editable  class="demo-slate-angular-editor" placeholder="hello world" [editor]="editor" [(ngModel)]="value"></slate-editable>
     </div>
     <div class="demo-rich-editor-wrapper">
-        <slate-editable-2  class="demo-slate-angular-editor" [placeholderDecorate]="placeholderDecorate" [editor]="editorWithCustomDecoration" [(ngModel)]="otherValue"></slate-editable-2>
+        <slate-editable  class="demo-slate-angular-editor" [placeholderDecorate]="placeholderDecorate" [editor]="editorWithCustomDecoration" [(ngModel)]="otherValue"></slate-editable>
     </div>
     `
 })

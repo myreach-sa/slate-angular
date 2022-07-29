@@ -186,7 +186,7 @@ export class DemoTextMarkComponent extends BaseTextComponent {
 
 ```
 <div class="demo-richtext-container">
-    <slate-editable-2 [editor]="editor" [(ngModel)]="value"
+    <slate-editable [editor]="editor" [(ngModel)]="value"
         (ngModelChange)="valueChange($event)"
         [renderElement]="renderElement"
         [renderText]="renderText">
@@ -211,7 +211,7 @@ export class DemoTextMarkComponent extends BaseTextComponent {
         <ng-template #li let-context="context" let-viewContext="viewContext">
             <li slateElement [context]="context" [viewContext]="viewContext"></li>
         </ng-template>
-    </slate-editable-2>
+    </slate-editable>
 </div>
 ```
 

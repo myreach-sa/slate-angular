@@ -1,4 +1,4 @@
-import { useRef } from "slate-angular/types/react-workaround";
+import { useRef } from "../types/react-workaround";
 import { AngularEditor } from "../plugins/angular-editor";
 
 export function useTrackUserInput(editor: AngularEditor) {

@@ -12,13 +12,13 @@
 
     </div>
 
-    <slate-editable-2
+    <slate-editable
         class="demo-slate-angular-editor"
         [editor]="editor"
         [(ngModel)]="value"
         (ngModelChange)="valueChange($event)"
         [renderElement]="renderElement"
         [onKeydown]="onKeydown"
-    ></slate-editable-2>
+    ></slate-editable>
 
 </div>

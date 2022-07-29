@@ -6,10 +6,10 @@ import { withAngular } from "../plugins/with-angular";
 @Component({
     selector: 'image-editable',
     template: `
-        <slate-editable-2 
+        <slate-editable 
             [editor]="editor"
             [ngModel]="value"
-        ></slate-editable-2>
+        ></slate-editable>
     `
 })
 export class ImageEditableComponent implements OnInit {

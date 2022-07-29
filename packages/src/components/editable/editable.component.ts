@@ -33,22 +33,22 @@ import {
   Text,
   Transforms,
 } from "slate";
-import { AndroidInputManager } from "slate-angular/hooks/android-input-manager/android-input-manager";
-import { useAndroidInputManager } from "slate-angular/hooks/android-input-manager/use-android-input-manager";
-import { useTrackUserInput } from "slate-angular/hooks/use-track-user-input";
+import { AndroidInputManager } from "../../hooks/android-input-manager/android-input-manager";
+import { useAndroidInputManager } from "../../hooks/android-input-manager/use-android-input-manager";
+import { useTrackUserInput } from "../../hooks/use-track-user-input";
 import {
   debounce,
   SlateErrorCode,
   SlatePlaceholder,
   throttle,
   ViewType,
-} from "slate-angular/types";
+} from "../../types";
 import {
   check,
   isDecoratorRangeListEqual,
   normalize,
-} from "slate-angular/utils";
-import { TRIPLE_CLICK } from "slate-angular/utils/constants";
+} from "../../utils";
+import { TRIPLE_CLICK } from "../../utils/constants";
 import {
   HAS_BEFORE_INPUT_SUPPORT,
   IS_ANDROID,
@@ -60,11 +60,11 @@ import {
   IS_SAFARI,
   IS_UC_MOBILE,
   IS_WECHATBROWSER,
-} from "slate-angular/utils/environment";
+} from "../../utils/environment";
 import {
   SlateChildrenContext,
   SlateViewContext,
-} from "slate-angular/view/context";
+} from "../../view/context";
 import { AngularEditor } from "../../plugins/angular-editor";
 import { UseRef, useRef } from "../../types/react-workaround";
 import {
@@ -94,7 +94,7 @@ import {
   PLACEHOLDER_SYMBOL,
 } from "../../utils/weak-maps";
 import { SlateStringTemplateComponent } from "../string/template.component";
-import { BEFORE_INPUT_EVENTS } from "slate-angular/custom-event/before-input-polyfill";
+import { BEFORE_INPUT_EVENTS } from "../../custom-event/before-input-polyfill";
 import { Subject } from "rxjs";
 
 type DeferredOperation = () => void;
@@ -108,7 +108,7 @@ interface EditableState {
 
 // https://github.com/sliteteam/slate-1/tree/working-android-input
 @Component({
-  selector: "slate-editable-2",
+  selector: "slate-editable",
   host: {
     class: "slate-editable-container",
     "[attr.contenteditable]": "readOnly ? undefined : true",
@@ -122,12 +122,12 @@ interface EditableState {
   providers: [
     {
       provide: NG_VALUE_ACCESSOR,
-      useExisting: forwardRef(() => Editable2Component),
+      useExisting: forwardRef(() => EditableComponent),
       multi: true,
     },
   ],
 })
-export class Editable2Component implements OnInit, OnChanges, OnDestroy {
+export class EditableComponent implements OnInit, OnChanges, OnDestroy {
   public viewContext: SlateViewContext;
   public context: SlateChildrenContext;
 

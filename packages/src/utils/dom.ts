@@ -5,7 +5,7 @@
 // COMPAT: This is required to prevent TypeScript aliases from doing some very
 // weird things for Slate's types with the same name as globals. (2019/11/27)
 // https://github.com/microsoft/TypeScript/issues/35002
-import { AngularEditor } from "slate-angular";
+import { AngularEditor } from "../plugins/angular-editor";
 import DOMNode = globalThis.Node;
 import DOMComment = globalThis.Comment;
 import DOMElement = globalThis.Element;

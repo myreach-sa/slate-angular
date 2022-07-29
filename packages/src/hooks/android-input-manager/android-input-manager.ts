@@ -1,5 +1,5 @@
 import { Editor, Node, Path, Point, Range, Text, Transforms } from "slate";
-import { DebouncedFunc } from "slate-angular/types";
+import { DebouncedFunc } from "../../types";
 import { AngularEditor } from "../../plugins/angular-editor";
 import {
   mergeStringDiffs,

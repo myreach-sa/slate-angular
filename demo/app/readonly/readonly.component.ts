@@ -6,12 +6,12 @@ import { withAngular } from "slate-angular";
     selector: 'demo-readonly',
     template: `
     <div class="demo-rich-editor-wrapper">
-        <slate-editable-2
+        <slate-editable
             class="demo-slate-angular-editor"
             [readOnly]="true"
             [editor]="editor"
             [(ngModel)]="value"
-        ></slate-editable-2>
+        ></slate-editable>
     </div>
     `
 })

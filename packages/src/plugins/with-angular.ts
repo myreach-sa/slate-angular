@@ -32,7 +32,7 @@ import {
   TextDiff,
   transformPendingRange,
   transformPendingPoint,
-} from "slate-angular/utils/diff-text";
+} from "../utils/diff-text";
 
 export const withAngular = <T extends Editor>(
   editor: T,
@@ -328,7 +328,7 @@ export const withAngular = <T extends Editor>(
   return e;
 };
 
-const getMatches = (e: Editor, path: Path) => {
+const getMatches = (e: AngularEditor, path: Path) => {
   const matches: [Path, Key][] = [];
   for (const [n, p] of Editor.levels(e, { at: path })) {
     const key = AngularEditor.findKey(e, n);

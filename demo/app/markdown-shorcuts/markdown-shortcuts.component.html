@@ -1,5 +1,5 @@
 <div class="demo-rich-editor-wrapper">
-    <slate-editable-2 class="demo-slate-angular-editor" [editor]="editor" [(ngModel)]="value"
+    <slate-editable class="demo-slate-angular-editor" [editor]="editor" [(ngModel)]="value"
         (ngModelChange)="valueChange($event)" [renderElement]="renderElement()">
         <ng-template #blockquoteTemplate let-context="context" let-viewContext="viewContext">
             <blockquote slateElement [context]="context" [viewContext]="viewContext"></blockquote>
@@ -28,5 +28,5 @@
         <ng-template #heading_6 let-context="context" let-viewContext="viewContext">
             <h6 slateElement [context]="context" [viewContext]="viewContext"></h6>
         </ng-template>
-    </slate-editable-2>
+    </slate-editable>
 </div>
