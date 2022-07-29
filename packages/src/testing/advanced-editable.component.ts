@@ -8,14 +8,14 @@ import { TestingLeafComponent } from "./leaf.component";
 @Component({
     selector: 'basic-editable',
     template: `
-        <slate-editable 
+        <slate-editable-2 
             [editor]="editor"
             [ngModel]="value"
             [decorate]="decorate"
             [renderLeaf]="renderLeaf"
             [placeholder]="placeholder"
             [trackBy]="trackBy"
-            ></slate-editable>
+            ></slate-editable-2>
     `
 })
 export class AdvancedEditableComponent implements OnInit {

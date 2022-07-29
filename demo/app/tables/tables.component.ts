@@ -44,29 +44,6 @@ export class DemoTablesComponent implements OnInit {
       return DemoTextMarkComponent;
     }
   }
-
-  valueChange(event) { }
-
-  mousedown(event: MouseEvent) {
-    const editableElement = AngularEditor.toDOMNode(this.editor, this.editor);
-    if (event.target === editableElement) {
-        const rectEditable = editableElement.getBoundingClientRect();
-        const centerX = rectEditable.x + rectEditable.width / 2;
-        const relativeElement = document.elementFromPoint(centerX, event.y);
-        const relativeBlockCardElement: DOMElement = relativeElement.closest('.slate-block-card');
-        if (relativeBlockCardElement) {
-            const blockCardEntry = AngularEditor.toSlateCardEntry(this.editor, relativeBlockCardElement.firstElementChild);
-            if (blockCardEntry && blockCardEntry[1]) {
-                const rootNodePath = blockCardEntry[1].slice(0, 1);
-                const rootNode = Node.get(this.editor, rootNodePath);
-                if (this.editor.isBlockCard(rootNode)) {
-                    event.preventDefault();
-                    AngularEditor.moveBlockCard(this.editor, rootNode, { direction: event.x < centerX ? 'left' : 'right' });
-                }
-            }
-        }
-    }
-}
 }
 
 const initialValue = [

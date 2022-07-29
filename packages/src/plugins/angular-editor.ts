@@ -15,6 +15,9 @@ import {
   FAKE_LEFT_BLOCK_CARD_OFFSET,
   FAKE_RIGHT_BLOCK_CARD_OFFSET,
   getCardTargetAttribute,
+  isCardCenterByTargetAttr,
+  isCardLeftByTargetAttr,
+  isCardRightByTargetAttr,
 } from "../utils/block-card";
 import {
   DOMElement,
@@ -28,10 +31,12 @@ import {
   isDOMSelection,
   normalizeDOMPoint,
 } from "../utils/dom";
-import { IS_CHROME, IS_FIREFOX } from "../utils/environment";
+import { IS_ANDROID, IS_CHROME, IS_FIREFOX } from "../utils/environment";
 import { Key } from "../utils/key";
 import {
   EDITOR_TO_ELEMENT,
+  EDITOR_TO_PENDING_DIFFS,
+  EDITOR_TO_SCHEDULE_FLUSH,
   EDITOR_TO_WINDOW,
   ELEMENT_TO_NODE,
   IS_COMPOSING,
@@ -252,7 +257,7 @@ export const AngularEditor = {
   ): boolean {
     const { editable = false } = options;
     const editorEl = AngularEditor.toDOMNode(editor, editor);
-    let targetEl;
+    let targetEl: HTMLElement;
 
     // COMPAT: In Firefox, reading `target.nodeType` will throw an error if
     // target is originating from an internal "restricted" element (e.g. a
@@ -392,7 +397,8 @@ export const AngularEditor = {
     const texts = Array.from(el.querySelectorAll(selector));
     let start = 0;
 
-    for (const text of texts) {
+    for (let i = 0; i < texts.length; i++) {
+      const text = texts[i];
       const domNode = text.childNodes[0] as HTMLElement;
 
       if (domNode == null || domNode.textContent == null) {
@@ -403,6 +409,20 @@ export const AngularEditor = {
       const attr = text.getAttribute("data-slate-length");
       const trueLength = attr == null ? length : parseInt(attr, 10);
       const end = start + trueLength;
+
+      // Prefer putting the selection inside the mark placeholder to ensure
+      // composed text is displayed with the correct marks.
+      const nextText = texts[i + 1];
+      if (
+        point.offset === end &&
+        nextText?.hasAttribute("data-slate-mark-placeholder")
+      ) {
+        domPoint = [
+          nextText,
+          nextText.textContent?.startsWith("\uFEFF") ? 1 : 0,
+        ];
+        break;
+      }
 
       if (point.offset <= end) {
         const offset = Math.min(length, Math.max(0, point.offset - start));
@@ -609,6 +629,22 @@ export const AngularEditor = {
           ];
 
           removals.forEach((el) => {
+            // COMPAT: While composing at the start of a text node, some keyboards put
+            // the text content inside the zero width space.
+            if (
+              IS_ANDROID &&
+              !exactMatch &&
+              el.hasAttribute("data-slate-zero-width") &&
+              el.textContent.length > 0 &&
+              el.textContext !== "\uFEFF"
+            ) {
+              if (el.textContent.startsWith("\uFEFF")) {
+                el.textContent = el.textContent.slice(1);
+              }
+
+              return;
+            }
+
             el!.parentNode!.removeChild(el);
           });
 
@@ -641,6 +677,11 @@ export const AngularEditor = {
       if (
         domNode &&
         offset === domNode.textContent!.length &&
+        // COMPAT: Android IMEs might remove the zero width space while composing,
+        // and we don't add it for line-breaks.
+        IS_ANDROID &&
+        domNode.getAttribute("data-slate-zero-width") === "z" &&
+        domNode.textContent?.startsWith("\uFEFF") &&
         // COMPAT: If the parent node is a Slate zero-width space, editor is
         // because the text node should have no characters. However, during IME
         // composition the ASCII characters will be prepended to the zero-width
@@ -653,6 +694,26 @@ export const AngularEditor = {
           (IS_FIREFOX && domNode.textContent?.endsWith("\n\n")))
       ) {
         offset--;
+      }
+    }
+
+    if (IS_ANDROID && !textNode && !exactMatch) {
+      const node = parentNode.hasAttribute("data-slate-node")
+        ? parentNode
+        : parentNode.closest("[data-slate-node]");
+
+      if (node && AngularEditor.hasDOMNode(editor, node, { editable: true })) {
+        const slateNode = AngularEditor.toSlateNode(editor, node);
+        let { path, offset } = Editor.start(
+          editor,
+          AngularEditor.findPath(editor, slateNode)
+        );
+
+        if (!node.querySelector("[data-slate-leaf]")) {
+          offset = nearestOffset;
+        }
+
+        return { path, offset } as T extends true ? Point | null : Point;
       }
     }
 
@@ -689,11 +750,11 @@ export const AngularEditor = {
     const el = isDOMSelection(domRange)
       ? domRange.anchorNode
       : domRange.startContainer;
-    let anchorNode;
-    let anchorOffset;
-    let focusNode;
-    let focusOffset;
-    let isCollapsed;
+    let anchorNode: DOMNode;
+    let anchorOffset: number;
+    let focusNode: DOMNode;
+    let focusOffset: number;
+    let isCollapsed: boolean;
 
     if (el) {
       if (isDOMSelection(domRange)) {
@@ -864,5 +925,19 @@ export const AngularEditor = {
     return (
       Editor.hasPath(editor, anchor.path) && Editor.hasPath(editor, focus.path)
     );
+  },
+
+  /**
+   * Experimental and android specific: Flush all pending diffs and cancel composition at the next possible time.
+   */
+  androidScheduleFlush(editor: Editor) {
+    EDITOR_TO_SCHEDULE_FLUSH.get(editor)?.();
+  },
+
+  /**
+   * Experimental and android specific: Get pending diffs
+   */
+  androidPendingDiffs(editor: Editor) {
+    return EDITOR_TO_PENDING_DIFFS.get(editor);
   },
 };
