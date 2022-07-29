@@ -10,6 +10,7 @@ import {
 import { Descendant, Element, Range, Text } from "slate";
 import { AngularEditor } from "../plugins/angular-editor";
 import {
+  EDITOR_TO_PLACEHOLDER_ELEMENT,
   ELEMENT_TO_COMPONENT,
   ELEMENT_TO_NODE,
   NODE_TO_ELEMENT,
@@ -112,6 +113,7 @@ export class BaseLeafComponent extends BaseComponent<SlateLeafContext>
         this.placeholderElement.setAttribute("data-slate-placeholder", "true");
         this.nativeElement.classList.add("leaf-with-placeholder");
         this.nativeElement.appendChild(this.placeholderElement);
+        // EDITOR_TO_PLACEHOLDER_ELEMENT.set(this.editor, this.placeholderElement);
       }
     } else {
       this.destroyPlaceholder();

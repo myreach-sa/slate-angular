@@ -41,13 +41,9 @@ export class SlateChildrenComponent
   ngOnInit() {}
 
   trackBy = (index, node) => {
-    const ret = (
+    return (
       this.viewContext.trackBy(node) ||
       AngularEditor.findKey(this.viewContext.editor, node)
-    ).id;
-
-    console.log("DEBUG trackBy", { index, node, ret });
-
-    return ret;
+    );
   };
 }

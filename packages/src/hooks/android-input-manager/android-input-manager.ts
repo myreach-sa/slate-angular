@@ -177,7 +177,9 @@ export function createAndroidInputManager({
       if (pendingMarks !== undefined) {
         EDITOR_TO_PENDING_INSERTION_MARKS.delete(editor);
         editor.marks = pendingMarks;
-        isInsertAfterMarkPlaceholder = true;
+        if (pendingMarks) {
+          isInsertAfterMarkPlaceholder = true;
+        }
       }
 
       const range = targetRange(diff);

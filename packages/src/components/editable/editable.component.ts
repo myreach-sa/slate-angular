@@ -384,7 +384,14 @@ export class Editable2Component implements OnInit, OnChanges {
 
   ngOnChanges(simpleChanges: SimpleChanges) {
     setTimeout(() => {
-      EDITOR_TO_PENDING_INSERTION_MARKS.set(this.editor, this.editor.marks);
+      const editor = this.editor;
+      const marks = editor.marks;
+
+      if (marks) {
+        EDITOR_TO_PENDING_INSERTION_MARKS.set(editor, marks);
+      } else {
+        EDITOR_TO_PENDING_INSERTION_MARKS.delete(editor);
+      }
     });
 
     // The autoFocus TextareaHTMLAttribute doesn't do anything on a div, so it
@@ -969,7 +976,7 @@ export class Editable2Component implements OnInit, OnChanges {
         }
       }
     }
-    
+
     this.detectContext();
     this.cdRef.detectChanges();
   }
@@ -1231,8 +1238,6 @@ export class Editable2Component implements OnInit, OnChanges {
       const element =
         editor.children[selection !== null ? selection.focus.path[0] : 0];
 
-      console.log("DEBUG element", element);
-
       const isRTL = getDirection(Node.string(element)) === "rtl";
 
       // COMPAT: Since we prevent the default behavior on
@@ -1266,18 +1271,21 @@ export class Editable2Component implements OnInit, OnChanges {
       // And in Firefox, the selection isn't properly collapsed.
       // (2017/10/17)
       if (Hotkeys.isMoveLineBackward(nativeEvent)) {
+        console.log("DEBUG isMoveLineBackward");
         event.preventDefault();
         Transforms.move(editor, { unit: "line", reverse: true });
         return;
       }
 
       if (Hotkeys.isMoveLineForward(nativeEvent)) {
+        console.log("DEBUG isMoveLineForward");
         event.preventDefault();
         Transforms.move(editor, { unit: "line" });
         return;
       }
 
       if (Hotkeys.isExtendLineBackward(nativeEvent)) {
+        console.log("DEBUG isExtendLineBackward");
         event.preventDefault();
         Transforms.move(editor, {
           unit: "line",
@@ -1288,6 +1296,7 @@ export class Editable2Component implements OnInit, OnChanges {
       }
 
       if (Hotkeys.isExtendLineForward(nativeEvent)) {
+        console.log("DEBUG isExtendLineForward");
         event.preventDefault();
         Transforms.move(editor, { unit: "line", edge: "focus" });
         return;
@@ -1299,30 +1308,39 @@ export class Editable2Component implements OnInit, OnChanges {
       // the void node with the zero-width space not being an empty
       // string.
       if (Hotkeys.isMoveBackward(nativeEvent)) {
-        event.preventDefault();
+        console.log("DEBUG isMoveBackward", {
+          selection,
+          isCollapsed: Range.isCollapsed(selection),
+        });
+        // event.preventDefault();
 
-        if (selection && Range.isCollapsed(selection)) {
-          Transforms.move(editor, { reverse: !isRTL });
-        } else {
-          Transforms.collapse(editor, { edge: "start" });
-        }
+        // if (selection && Range.isCollapsed(selection)) {
+        //   Transforms.move(editor, { reverse: !isRTL });
+        // } else {
+        //   Transforms.collapse(editor, { edge: "start" });
+        // }
 
         return;
       }
 
       if (Hotkeys.isMoveForward(nativeEvent)) {
-        event.preventDefault();
+        console.log("DEBUG isMoveForward", {
+          selection,
+          isCollapsed: Range.isCollapsed(selection),
+        });
+        // event.preventDefault();
 
-        if (selection && Range.isCollapsed(selection)) {
-          Transforms.move(editor, { reverse: isRTL });
-        } else {
-          Transforms.collapse(editor, { edge: "end" });
-        }
+        // if (selection && Range.isCollapsed(selection)) {
+        //   Transforms.move(editor, { reverse: isRTL });
+        // } else {
+        //   Transforms.collapse(editor, { edge: "end" });
+        // }
 
         return;
       }
 
       if (Hotkeys.isMoveWordBackward(nativeEvent)) {
+        console.log("DEBUG isMoveWordBackward");
         event.preventDefault();
 
         if (selection && Range.isExpanded(selection)) {
@@ -1334,6 +1352,7 @@ export class Editable2Component implements OnInit, OnChanges {
       }
 
       if (Hotkeys.isMoveWordForward(nativeEvent)) {
+        console.log("DEBUG isMoveWordForward");
         event.preventDefault();
 
         if (selection && Range.isExpanded(selection)) {
@@ -1355,23 +1374,27 @@ export class Editable2Component implements OnInit, OnChanges {
           Hotkeys.isItalic(nativeEvent) ||
           Hotkeys.isTransposeCharacter(nativeEvent)
         ) {
+          console.log("DEBUG isTransposeCharacter");
           event.preventDefault();
           return;
         }
 
         if (Hotkeys.isSoftBreak(nativeEvent)) {
+          console.log("DEBUG isSoftBreak");
           event.preventDefault();
           Editor.insertSoftBreak(editor);
           return;
         }
 
         if (Hotkeys.isSplitBlock(nativeEvent)) {
+          console.log("DEBUG isSplitBlock");
           event.preventDefault();
           Editor.insertBreak(editor);
           return;
         }
 
         if (Hotkeys.isDeleteBackward(nativeEvent)) {
+          console.log("DEBUG isDeleteBackward");
           event.preventDefault();
 
           if (selection && Range.isExpanded(selection)) {
@@ -1384,6 +1407,7 @@ export class Editable2Component implements OnInit, OnChanges {
         }
 
         if (Hotkeys.isDeleteForward(nativeEvent)) {
+          console.log("DEBUG isDeleteForward");
           event.preventDefault();
 
           if (selection && Range.isExpanded(selection)) {
@@ -1396,6 +1420,7 @@ export class Editable2Component implements OnInit, OnChanges {
         }
 
         if (Hotkeys.isDeleteLineBackward(nativeEvent)) {
+          console.log("DEBUG isDeleteLineBackward");
           event.preventDefault();
 
           if (selection && Range.isExpanded(selection)) {
@@ -1408,6 +1433,7 @@ export class Editable2Component implements OnInit, OnChanges {
         }
 
         if (Hotkeys.isDeleteLineForward(nativeEvent)) {
+          console.log("DEBUG isDeleteLineForward");
           event.preventDefault();
 
           if (selection && Range.isExpanded(selection)) {
@@ -1420,6 +1446,7 @@ export class Editable2Component implements OnInit, OnChanges {
         }
 
         if (Hotkeys.isDeleteWordBackward(nativeEvent)) {
+          console.log("DEBUG isDeleteWordBackward");
           event.preventDefault();
 
           if (selection && Range.isExpanded(selection)) {
@@ -1432,6 +1459,7 @@ export class Editable2Component implements OnInit, OnChanges {
         }
 
         if (Hotkeys.isDeleteWordForward(nativeEvent)) {
+          console.log("DEBUG isDeleteWordForward");
           event.preventDefault();
 
           if (selection && Range.isExpanded(selection)) {
