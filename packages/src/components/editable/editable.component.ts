@@ -10,11 +10,17 @@ import {
   Input,
   NgZone,
   OnChanges,
+  OnDestroy,
   OnInit,
+  Renderer2,
   SimpleChanges,
   ViewChild,
 } from "@angular/core";
 import { NG_VALUE_ACCESSOR } from "@angular/forms";
+import {
+  BeforeInputEvent,
+  extractBeforeInputEvent,
+} from "../../custom-event/BeforeInputEventPlugin";
 import getDirection from "direction";
 import {
   BasePoint,
@@ -88,6 +94,8 @@ import {
   PLACEHOLDER_SYMBOL,
 } from "../../utils/weak-maps";
 import { SlateStringTemplateComponent } from "../string/template.component";
+import { BEFORE_INPUT_EVENTS } from "slate-angular/custom-event/before-input-polyfill";
+import { Subject } from "rxjs";
 
 type DeferredOperation = () => void;
 
@@ -119,7 +127,7 @@ interface EditableState {
     },
   ],
 })
-export class Editable2Component implements OnInit, OnChanges {
+export class Editable2Component implements OnInit, OnChanges, OnDestroy {
   public viewContext: SlateViewContext;
   public context: SlateChildrenContext;
 
@@ -238,6 +246,10 @@ export class Editable2Component implements OnInit, OnChanges {
 
   private deferredOperations = useRef<DeferredOperation[]>([]);
 
+  private destroy$ = new Subject<void>();
+  private manualListeners: (() => void)[] = [];
+  private initialized = false;
+
   private readonly state: EditableState = {
     isDraggingInternally: false,
     isUpdatingSelection: false,
@@ -255,8 +267,6 @@ export class Editable2Component implements OnInit, OnChanges {
     return { current: this.elementRef?.nativeElement };
   }
 
-  private _scheduleOnDOMSelectionChangeTimer: number;
-
   private readonly onDOMSelectionChange = throttle(() => {
     this.onSelectionChangeHandlerInner();
   }, 100);
@@ -265,10 +275,6 @@ export class Editable2Component implements OnInit, OnChanges {
     this.onDOMSelectionChange.bind(this),
     0
   );
-
-  private readonly scheduleOnDOMSelectionChangeFlush = () => {
-    window.clearTimeout(this._scheduleOnDOMSelectionChangeTimer);
-  };
 
   private setIsComposing(isComposing: boolean): void {
     if (this.isComposing !== isComposing) {
@@ -283,6 +289,7 @@ export class Editable2Component implements OnInit, OnChanges {
 
   constructor(
     private readonly elementRef: ElementRef<HTMLElement>,
+    private readonly renderer2: Renderer2,
     private readonly cdRef: ChangeDetectorRef,
     private readonly ngZone: NgZone,
     private readonly injector: Injector
@@ -383,6 +390,10 @@ export class Editable2Component implements OnInit, OnChanges {
   }
 
   ngOnChanges(simpleChanges: SimpleChanges) {
+    if (!this.initialized) {
+      return;
+    }
+
     setTimeout(() => {
       const editor = this.editor;
       const marks = editor.marks;
@@ -403,6 +414,55 @@ export class Editable2Component implements OnInit, OnChanges {
     this.isomorphicLayoutEffect();
 
     this.cdRef.detectChanges();
+  }
+
+  ngOnDestroy() {
+    NODE_TO_ELEMENT.delete(this.editor);
+    this.manualListeners.forEach((manualListener) => {
+      manualListener();
+    });
+    this.destroy$.complete();
+    EDITOR_TO_ON_CHANGE.delete(this.editor);
+  }
+
+  private initialize(): void {
+    this.initialized = true;
+    const window = AngularEditor.getWindow(this.editor);
+    this.addEventListener(
+      "selectionchange",
+      (event) => {
+        this.onSelectionChangeHandler();
+      },
+      window.document
+    );
+    if (HAS_BEFORE_INPUT_SUPPORT) {
+      this.addEventListener(
+        "beforeinput",
+        this.onBeforeInputHandler.bind(this)
+      );
+    }
+    this.addEventListener("blur", this.onBlurHandler.bind(this));
+    this.addEventListener("click", this.onClickHandler.bind(this));
+    this.addEventListener(
+      "compositionend",
+      this.onCompositionEndHandler.bind(this)
+    );
+    this.addEventListener(
+      "compositionstart",
+      this.onCompositionStartHandler.bind(this)
+    );
+    this.addEventListener("copy", this.onCopyHandler.bind(this));
+    this.addEventListener("cut", this.onCutHandler.bind(this));
+    this.addEventListener("dragover", this.onDragOverHandler.bind(this));
+    this.addEventListener("dragstart", this.onDragStartHandler.bind(this));
+    this.addEventListener("dragend", this.onDragEndHandler.bind(this));
+    this.addEventListener("drop", this.onDropHandler.bind(this));
+    this.addEventListener("focus", this.onFocusHandler.bind(this));
+    this.addEventListener("keydown", this.onKeyDownHandler.bind(this));
+    this.addEventListener("paste", this.onPasteHandler.bind(this));
+    BEFORE_INPUT_EVENTS.forEach((event) => {
+      this.addEventListener(event.name, () => {});
+    });
   }
 
   private onTouchedCallback: () => void = () => {};
@@ -451,7 +511,7 @@ export class Editable2Component implements OnInit, OnChanges {
     }
   }
 
-  @HostListener("document:selectionchange", [])
+  // @HostListener("document:selectionchange", [])
   public onSelectionChangeHandler(): void {
     this.scheduleOnSelectionChange();
   }
@@ -513,7 +573,7 @@ export class Editable2Component implements OnInit, OnChanges {
     }
   }
 
-  @HostListener("beforeinput", ["$event"])
+  // @HostListener("beforeinput", ["$event"])
   public onBeforeInputHandler(event: InputEvent): void {
     const editor = this.editor;
 
@@ -759,7 +819,7 @@ export class Editable2Component implements OnInit, OnChanges {
     }
   }
 
-  @HostListener("input", ["$event"])
+  // @HostListener("input", ["$event"])
   public onInputHandler(_event: InputEvent): void {
     const androidInputManager = this.androidInputManager;
     const deferredOperations = this.deferredOperations;
@@ -779,7 +839,7 @@ export class Editable2Component implements OnInit, OnChanges {
     deferredOperations.current = [];
   }
 
-  @HostListener("blur", ["$event"])
+  // @HostListener("blur", ["$event"])
   public onBlurHandler(event: FocusEvent): void {
     const editor = this.editor;
     const state = this.state;
@@ -847,7 +907,7 @@ export class Editable2Component implements OnInit, OnChanges {
     IS_FOCUSED.delete(editor);
   }
 
-  @HostListener("focus", ["$event"])
+  // @HostListener("focus", ["$event"])
   public onFocusHandler(event: FocusEvent): void {
     const editor = this.editor;
     const state = this.state;
@@ -874,7 +934,7 @@ export class Editable2Component implements OnInit, OnChanges {
     }
   }
 
-  @HostListener("click", ["$event"])
+  // @HostListener("click", ["$event"])
   public onClickHandler(event: MouseEvent): void {
     const editor = this.editor;
     if (
@@ -925,7 +985,7 @@ export class Editable2Component implements OnInit, OnChanges {
     }
   }
 
-  @HostListener("compositionEnd", ["$event"])
+  // @HostListener("compositionEnd", ["$event"])
   public onCompositionEndHandler(event: CompositionEvent): void {
     const editor = this.editor;
     const androidInputManager = this.androidInputManager;
@@ -981,7 +1041,7 @@ export class Editable2Component implements OnInit, OnChanges {
     this.cdRef.detectChanges();
   }
 
-  @HostListener("compositionUpdate", ["$event"])
+  // @HostListener("compositionUpdate", ["$event"])
   public onCompositionUpdateHandler(event: CompositionEvent): void {
     const editor = this.editor;
     if (
@@ -995,7 +1055,7 @@ export class Editable2Component implements OnInit, OnChanges {
     }
   }
 
-  @HostListener("compositionStart", ["$event"])
+  // @HostListener("compositionStart", ["$event"])
   public onCompositionStartHandler(event: CompositionEvent): void {
     const editor = this.editor;
     const androidInputManager = this.androidInputManager;
@@ -1039,7 +1099,7 @@ export class Editable2Component implements OnInit, OnChanges {
     this.cdRef.detectChanges();
   }
 
-  @HostListener("copy", ["$event"])
+  // @HostListener("copy", ["$event"])
   public onCopyHandler(event: ClipboardEvent): void {
     const editor = this.editor;
     if (
@@ -1051,7 +1111,7 @@ export class Editable2Component implements OnInit, OnChanges {
     }
   }
 
-  @HostListener("cut", ["$event"])
+  // @HostListener("cut", ["$event"])
   public onCutHandler(event: ClipboardEvent): void {
     const editor = this.editor;
     if (
@@ -1076,7 +1136,7 @@ export class Editable2Component implements OnInit, OnChanges {
     }
   }
 
-  @HostListener("paste", ["$event"])
+  // @HostListener("paste", ["$event"])
   public onPasteHandler(event: ClipboardEvent): void {
     const editor = this.editor;
     if (
@@ -1095,7 +1155,7 @@ export class Editable2Component implements OnInit, OnChanges {
     }
   }
 
-  @HostListener("dragOver", ["$event"])
+  // @HostListener("dragOver", ["$event"])
   public onDragOverHandler(event: DragEvent): void {
     const editor = this.editor;
     if (
@@ -1113,7 +1173,7 @@ export class Editable2Component implements OnInit, OnChanges {
     }
   }
 
-  @HostListener("dragStart", ["$event"])
+  // @HostListener("dragStart", ["$event"])
   public onDragStartHandler(event: DragEvent): void {
     const editor = this.editor;
     const state = this.state;
@@ -1142,7 +1202,7 @@ export class Editable2Component implements OnInit, OnChanges {
     }
   }
 
-  @HostListener("drop", ["$event"])
+  // @HostListener("drop", ["$event"])
   public onDropHandler(event: DragEvent): void {
     const editor = this.editor;
     const state = this.state;
@@ -1187,7 +1247,7 @@ export class Editable2Component implements OnInit, OnChanges {
     state.isDraggingInternally = false;
   }
 
-  @HostListener("dragEnd", ["$event"])
+  // @HostListener("dragEnd", ["$event"])
   public onDragEndHandler(event: DragEvent): void {
     const editor = this.editor;
     const state = this.state;
@@ -1207,7 +1267,7 @@ export class Editable2Component implements OnInit, OnChanges {
     state.isDraggingInternally = false;
   }
 
-  @HostListener("keydown", ["$event"])
+  // @HostListener("keydown", ["$event"])
   public onKeyDownHandler(event: KeyboardEvent): void {
     const editor = this.editor;
     if (
@@ -1312,13 +1372,13 @@ export class Editable2Component implements OnInit, OnChanges {
           selection,
           isCollapsed: Range.isCollapsed(selection),
         });
-        // event.preventDefault();
+        event.preventDefault();
 
-        // if (selection && Range.isCollapsed(selection)) {
-        //   Transforms.move(editor, { reverse: !isRTL });
-        // } else {
-        //   Transforms.collapse(editor, { edge: "start" });
-        // }
+        if (selection && Range.isCollapsed(selection)) {
+          Transforms.move(editor, { reverse: !isRTL });
+        } else {
+          Transforms.collapse(editor, { edge: "start" });
+        }
 
         return;
       }
@@ -1328,13 +1388,13 @@ export class Editable2Component implements OnInit, OnChanges {
           selection,
           isCollapsed: Range.isCollapsed(selection),
         });
-        // event.preventDefault();
+        event.preventDefault();
 
-        // if (selection && Range.isCollapsed(selection)) {
-        //   Transforms.move(editor, { reverse: isRTL });
-        // } else {
-        //   Transforms.collapse(editor, { edge: "end" });
-        // }
+        if (selection && Range.isCollapsed(selection)) {
+          Transforms.move(editor, { reverse: isRTL });
+        } else {
+          Transforms.collapse(editor, { edge: "end" });
+        }
 
         return;
       }
@@ -1755,6 +1815,57 @@ export class Editable2Component implements OnInit, OnChanges {
       isStrictDecorate: this.isStrictDecorate,
       templateComponent: this.templateComponent,
     };
+  }
+
+  //#region event proxy
+  private addEventListener(
+    eventName: string,
+    listener: EventListener,
+    target: HTMLElement | Document = this.elementRef.nativeElement
+  ) {
+    this.manualListeners.push(
+      this.renderer2.listen(target, eventName, (event: Event) => {
+        const beforeInputEvent = extractBeforeInputEvent(
+          event.type,
+          null,
+          event,
+          event.target
+        );
+        if (beforeInputEvent) {
+          this.onFallbackBeforeInput(beforeInputEvent);
+        }
+        listener(event);
+      })
+    );
+  }
+
+  private onFallbackBeforeInput(event: BeforeInputEvent) {
+    // COMPAT: Certain browsers don't support the `beforeinput` event, so we
+    // fall back to React's leaky polyfill instead just for it. It
+    // only works for the `insertText` input type.
+    if (
+      !HAS_BEFORE_INPUT_SUPPORT &&
+      !this.readOnly &&
+      !EditableUtils.isEventHandled(event.nativeEvent, this.onBeforeInput) &&
+      EditableUtils.hasEditableTarget(this.editor, event.nativeEvent.target)
+    ) {
+      event.nativeEvent.preventDefault();
+      try {
+        const text = event.data;
+        if (!Range.isCollapsed(this.editor.selection)) {
+          Editor.deleteFragment(this.editor);
+        }
+        // just handle Non-IME input
+        if (!this.isComposing) {
+          Editor.insertText(this.editor, text);
+        }
+      } catch (error) {
+        this.editor.onError({
+          code: SlateErrorCode.ToNativeSelectionError,
+          nativeError: error,
+        });
+      }
+    }
   }
 }
 
