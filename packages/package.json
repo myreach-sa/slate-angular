@@ -2,7 +2,7 @@
   "name": "@rea.ch/slate-angular",
   "version": "1.1.0",
   "peerDependencies": {
-    "slate": ">= 0.81.1",
+    "slate": ">= 0.82.0",
     "tslib": "^2.0.0",
     "slate-history": "~0.66.0",
     "debug": "^4.1.1",

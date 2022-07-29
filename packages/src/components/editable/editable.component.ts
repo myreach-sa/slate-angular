@@ -1315,7 +1315,7 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
           selection,
           isCollapsed: Range.isCollapsed(selection),
         });
-        event.preventDefault();
+        // event.preventDefault();
 
         if (selection && Range.isCollapsed(selection)) {
           Transforms.move(editor, { reverse: !isRTL });
@@ -1331,7 +1331,7 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
           selection,
           isCollapsed: Range.isCollapsed(selection),
         });
-        event.preventDefault();
+        // event.preventDefault();
 
         if (selection && Range.isCollapsed(selection)) {
           Transforms.move(editor, { reverse: isRTL });
@@ -1344,7 +1344,7 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
 
       if (Hotkeys.isMoveWordBackward(nativeEvent)) {
         console.log("DEBUG isMoveWordBackward");
-        event.preventDefault();
+        // event.preventDefault();
 
         if (selection && Range.isExpanded(selection)) {
           Transforms.collapse(editor, { edge: "focus" });
@@ -1356,7 +1356,7 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
 
       if (Hotkeys.isMoveWordForward(nativeEvent)) {
         console.log("DEBUG isMoveWordForward");
-        event.preventDefault();
+        // event.preventDefault();
 
         if (selection && Range.isExpanded(selection)) {
           Transforms.collapse(editor, { edge: "focus" });
@@ -1398,7 +1398,7 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
 
         if (Hotkeys.isDeleteBackward(nativeEvent)) {
           console.log("DEBUG isDeleteBackward");
-          event.preventDefault();
+          // event.preventDefault();
 
           if (selection && Range.isExpanded(selection)) {
             Editor.deleteFragment(editor, { direction: "backward" });
@@ -1411,7 +1411,7 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
 
         if (Hotkeys.isDeleteForward(nativeEvent)) {
           console.log("DEBUG isDeleteForward");
-          event.preventDefault();
+          // event.preventDefault();
 
           if (selection && Range.isExpanded(selection)) {
             Editor.deleteFragment(editor, { direction: "forward" });
@@ -1424,7 +1424,7 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
 
         if (Hotkeys.isDeleteLineBackward(nativeEvent)) {
           console.log("DEBUG isDeleteLineBackward");
-          event.preventDefault();
+          // event.preventDefault();
 
           if (selection && Range.isExpanded(selection)) {
             Editor.deleteFragment(editor, { direction: "backward" });
@@ -1437,7 +1437,7 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
 
         if (Hotkeys.isDeleteLineForward(nativeEvent)) {
           console.log("DEBUG isDeleteLineForward");
-          event.preventDefault();
+          // event.preventDefault();
 
           if (selection && Range.isExpanded(selection)) {
             Editor.deleteFragment(editor, { direction: "forward" });
@@ -1450,7 +1450,7 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
 
         if (Hotkeys.isDeleteWordBackward(nativeEvent)) {
           console.log("DEBUG isDeleteWordBackward");
-          event.preventDefault();
+          // event.preventDefault();
 
           if (selection && Range.isExpanded(selection)) {
             Editor.deleteFragment(editor, { direction: "backward" });
@@ -1463,7 +1463,7 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
 
         if (Hotkeys.isDeleteWordForward(nativeEvent)) {
           console.log("DEBUG isDeleteWordForward");
-          event.preventDefault();
+          // event.preventDefault();
 
           if (selection && Range.isExpanded(selection)) {
             Editor.deleteFragment(editor, { direction: "forward" });
