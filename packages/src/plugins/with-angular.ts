@@ -323,7 +323,19 @@ export const withAngular = <T extends Editor>(
     onChange();
   };
 
-  e.isBlockCard = (element) => false;
+  e.onKeydown = () => { };
+
+  e.onClick = () => { };
+
+  e.isBlockCard = (_element) => false;
+
+  e.onError = (errorData: SlateError) => {
+    if (errorData.nativeError) {
+      console.error(errorData.nativeError);
+    } else {
+      console.error(errorData);
+    }
+  };
 
   return e;
 };

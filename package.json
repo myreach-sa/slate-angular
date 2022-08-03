@@ -38,7 +38,6 @@
         "@angular/platform-browser": "~12.1.2",
         "@angular/platform-browser-dynamic": "~12.1.2",
         "@angular/router": "~12.1.2",
-        "debug": "^4.1.1",
         "direction": "^1.0.3",
         "is-hotkey": "^0.1.6",
         "rxjs": "~6.6.0",

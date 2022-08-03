@@ -14,10 +14,6 @@ import { SlateError } from "../types/error";
 import {
   FAKE_LEFT_BLOCK_CARD_OFFSET,
   FAKE_RIGHT_BLOCK_CARD_OFFSET,
-  getCardTargetAttribute,
-  isCardCenterByTargetAttr,
-  isCardLeftByTargetAttr,
-  isCardRightByTargetAttr,
 } from "../utils/block-card";
 import {
   DOMElement,

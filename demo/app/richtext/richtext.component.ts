@@ -157,7 +157,7 @@ export class DemoRichtextComponent implements OnInit {
     }
   }
 
-  valueChange(event: Editor['children']) {
+  valueChange(event: Editor["children"]) {
     if (localStorage.getItem(SLATE_DEV_MODE_KEY)) {
       console.log(`anchor: ${JSON.stringify(this.editor.selection?.anchor)}`);
       console.log(`focus:  ${JSON.stringify(this.editor.selection?.focus)}`);
@@ -219,29 +219,18 @@ const initialValue = [
       { text: "This is editable " },
       { text: "rich", bold: true },
       { text: " text, " },
-      { text: "much", bold: true, italic: true },
+      { text: "much", italic: true },
       { text: " better than a " },
-      { text: "<textarea>", "code-line": true },
+      { text: "<textarea>", code: true },
       { text: "!" },
     ],
-  },
-  {
-    type: "heading-one",
-    children: [{ text: "This is h1 " }],
-  },
-  {
-    type: "heading-two",
-    children: [{ text: "This is h2 " }],
-  },
-  {
-    type: "heading-three",
-    children: [{ text: "This is h3 " }],
   },
   {
     type: "paragraph",
     children: [
       {
-        text: `Since it's rich text, you can do things like turn a selection of text `,
+        text:
+          "Since it's rich text, you can do things like turn a selection of text ",
       },
       { text: "bold", bold: true },
       {
@@ -256,10 +245,7 @@ const initialValue = [
   },
   {
     type: "paragraph",
+    align: "center",
     children: [{ text: "Try it out for yourself!" }],
-  },
-  {
-    type: "paragraph",
-    children: [{ text: "" }],
   },
 ];
