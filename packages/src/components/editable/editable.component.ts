@@ -278,6 +278,8 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private onChange(): void {
+    this.detectContext();
+    this.cdRef.detectChanges();
     this.toNativeSelection();
     this.onChangeCallback(this.editor.children);
   }
