@@ -21,6 +21,8 @@ import { DemoPlaceholderComponent } from './placeholder/placeholder.component';
 import { DemoElementEditableButtonComponent } from './components/editable-button/editable-button.component';
 import { DemoInlinesComponent } from './inlines/inlines.component';
 import { DemoElementLinkComponent } from './components/link/link.component';
+import { DemoCheckListComponent } from './check-list/check-list.component';
+import { DemoElementCheckListComponent } from './components/check-list/check-list.component';
 
 @NgModule({
     declarations: [
@@ -41,7 +43,9 @@ import { DemoElementLinkComponent } from './components/link/link.component';
         DemoPlaceholderComponent,
         DemoElementEditableButtonComponent,
         DemoInlinesComponent,
-        DemoElementLinkComponent
+        DemoElementLinkComponent,
+        DemoElementCheckListComponent,
+        DemoCheckListComponent,
     ],
     imports: [
         BrowserModule,

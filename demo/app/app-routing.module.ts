@@ -10,11 +10,16 @@ import { DemoMentionsComponent } from './mentions/mentions.component';
 import { DemoReadonlyComponent } from './readonly/readonly.component';
 import { DemoPlaceholderComponent } from './placeholder/placeholder.component';
 import { DemoInlinesComponent } from './inlines/inlines.component';
+import { DemoCheckListComponent } from './check-list/check-list.component';
 
 const routes: Routes = [
     {
         path: 'readonly',
         component: DemoReadonlyComponent
+    },
+    {
+        path: 'check-list',
+        component: DemoCheckListComponent
     },
     {
         path: '',

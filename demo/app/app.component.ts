@@ -11,6 +11,10 @@ export class AppComponent implements OnInit {
             name: 'Readonly'
         },
         {
+            url: '/check-list',
+            name: 'Checklist'
+        },
+        {
             url: '/',
             name: 'RichText'
         },
