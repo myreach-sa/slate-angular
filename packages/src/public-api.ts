@@ -8,7 +8,7 @@ export * from './components/element/element.component';
 export * from './components/string/string.component';
 export * from './components/children/children.component';
 export * from './components/leaves/leaves.component';
-export * from './components/restore-dom/restore-dom.component';
+export * from './components/restore-dom/restore-dom.directive';
 export * from './module';
 export * from './types/error';
 export * from './view/base';

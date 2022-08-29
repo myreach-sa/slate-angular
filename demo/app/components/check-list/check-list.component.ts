@@ -17,8 +17,6 @@ import { CheckListItemElement } from "../../../../custom-types";
         </span>
 
         <span
-            contentEditable="false"
-            suppressContentEditableWarning
             style="flex: 1;"
             [style.opacity]="element.checked ? '0.666' : '1'"
             [style.textDecoration]="element.checked ? 'line-through' : 'none'"

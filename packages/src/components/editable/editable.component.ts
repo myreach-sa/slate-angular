@@ -17,13 +17,12 @@ import {
   ViewChild,
 } from "@angular/core";
 import { NG_VALUE_ACCESSOR } from "@angular/forms";
-import {
-  BeforeInputEvent,
-  extractBeforeInputEvent,
-} from "../../custom-event/BeforeInputEventPlugin";
 import getDirection from "direction";
+import { debounce, throttle } from "lodash";
+import { Subject } from "rxjs";
 import {
   BasePoint,
+  BaseRange,
   Editor,
   Element,
   Node,
@@ -33,18 +32,29 @@ import {
   Text,
   Transforms,
 } from "slate";
+import {
+  BeforeInputEvent,
+  extractBeforeInputEvent,
+} from "../../custom-event/BeforeInputEventPlugin";
 import { AndroidInputManager } from "../../hooks/android-input-manager/android-input-manager";
 import { useAndroidInputManager } from "../../hooks/android-input-manager/use-android-input-manager";
 import { useTrackUserInput } from "../../hooks/use-track-user-input";
-import {
-  debounce,
-  SlateErrorCode,
-  SlatePlaceholder,
-  throttle,
-  ViewType,
-} from "../../types";
+import { AngularEditor } from "../../plugins/angular-editor";
+import { SlateErrorCode, SlatePlaceholder, ViewType } from "../../types";
+import { useRef } from "../../types/react-workaround";
 import { check, isDecoratorRangeListEqual, normalize } from "../../utils";
 import { TRIPLE_CLICK } from "../../utils/constants";
+import {
+  DOMElement,
+  DOMNode,
+  DOMRange,
+  DOMSelection,
+  DOMText,
+  getDefaultView,
+  isDOMElement,
+  isDOMNode,
+  isPlainTextOnlyPaste,
+} from "../../utils/dom";
 import {
   HAS_BEFORE_INPUT_SUPPORT,
   IS_ANDROID,
@@ -57,20 +67,6 @@ import {
   IS_UC_MOBILE,
   IS_WECHATBROWSER,
 } from "../../utils/environment";
-import { SlateChildrenContext, SlateViewContext } from "../../view/context";
-import { AngularEditor } from "../../plugins/angular-editor";
-import { UseRef, useRef } from "../../types/react-workaround";
-import {
-  DOMElement,
-  DOMNode,
-  DOMRange,
-  DOMSelection,
-  DOMText,
-  getDefaultView,
-  isDOMElement,
-  isDOMNode,
-  isPlainTextOnlyPaste,
-} from "../../utils/dom";
 import Hotkeys from "../../utils/hotkeys";
 import {
   EDITOR_TO_ELEMENT,
@@ -87,8 +83,9 @@ import {
   NODE_TO_ELEMENT,
   PLACEHOLDER_SYMBOL,
 } from "../../utils/weak-maps";
+import { SlateChildrenContext, SlateViewContext } from "../../view/context";
+import { RestoreDOMDirective } from "../restore-dom/restore-dom.directive";
 import { SlateStringTemplateComponent } from "../string/template.component";
-import { Subject } from "rxjs";
 
 type DeferredOperation = () => void;
 
@@ -102,15 +99,42 @@ interface EditableState {
 // https://github.com/sliteteam/slate-1/tree/working-android-input
 @Component({
   selector: "slate-editable",
+  template: `
+    <slate-children
+      [children]="editor.children"
+      [context]="context"
+      [viewContext]="viewContext"
+    ></slate-children>
+
+    <slate-string-template #templateComponent></slate-string-template>
+  `,
+  styles: [
+    `
+      :host {
+        position: relative;
+        display: block;
+        outline: "none";
+        white-space: "pre-wrap";
+        word-wrap: "break-word";
+      }
+    `,
+  ],
   host: {
     class: "slate-editable-container",
+    
+    'attr.data-slate-editor': 'true',
+		'attr.data-slate-node': 'value',
+
     "[attr.contenteditable]": "readOnly ? undefined : true",
+    
     "[attr.role]": `readOnly ? undefined : 'textbox'`,
     "[attr.spellCheck]": `!hasBeforeInputSupport ? false : spellCheck`,
     "[attr.autoCorrect]": `!hasBeforeInputSupport ? 'false' : autoCorrect`,
     "[attr.autoCapitalize]": `!hasBeforeInputSupport ? 'false' : autoCapitalize`,
+
+    '(change)': '_onChange($event.target.value)',
+		'(blur)': '_onTouched()',
   },
-  templateUrl: "editable.component.html",
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [
     {
@@ -120,7 +144,8 @@ interface EditableState {
     },
   ],
 })
-export class EditableComponent implements OnInit, OnChanges, OnDestroy {
+export class EditableComponent extends RestoreDOMDirective
+  implements OnInit, OnChanges, OnDestroy {
   public viewContext: SlateViewContext;
   public context: SlateChildrenContext;
 
@@ -251,8 +276,6 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
   };
 
   private onUserInput!: () => void;
-  private onReRender!: () => void;
-  public receivedUserInput!: UseRef<boolean>;
 
   private androidInputManager!: AndroidInputManager;
 
@@ -282,12 +305,14 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   constructor(
-    private readonly elementRef: ElementRef<HTMLElement>,
+    elementRef: ElementRef<HTMLElement>,
     private readonly renderer2: Renderer2,
     private readonly cdRef: ChangeDetectorRef,
     private readonly ngZone: NgZone,
     private readonly injector: Injector
-  ) {}
+  ) {
+    super(elementRef);
+  }
 
   ngOnInit(): void {
     const editor = this.editor;
@@ -301,13 +326,10 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
       this.initialized = true;
     });
 
-    const { onUserInput, receivedUserInput, onReRender } = useTrackUserInput(
-      editor
-    );
+    const { onUserInput, receivedUserInput } = useTrackUserInput(editor);
 
     this.onUserInput = onUserInput;
     this.receivedUserInput = receivedUserInput;
-    this.onReRender = onReRender;
 
     this.androidInputManager = useAndroidInputManager(editor, {
       node: this.elementRef.nativeElement,
@@ -319,7 +341,7 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
     this.initializeContext();
 
     // remove unused DOM, just keep templateComponent instance
-    this.templateElementRef.nativeElement.remove();
+    this.templateElementRef?.nativeElement.remove();
 
     // add browser class
     let browserClass = IS_FIREFOX ? "firefox" : IS_SAFARI ? "safari" : "";
@@ -404,18 +426,11 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
         this.editor.children = normalize(value);
       }
       this.initializeContext();
-      this.cdRef.detectChanges();
+      this.cdRef.markForCheck();
     }
   }
 
-  @HostListener("document:selectionchange", [])
-  public onSelectionChangeHandler(): void {
-    this.scheduleOnSelectionChange();
-  }
-
   private onSelectionChangeHandlerInner(): void {
-    console.log("DEBUG onSelectionChangeHandlerInner");
-
     const editor = this.editor;
     const state = this.state;
     const androidInputManager = this.androidInputManager;
@@ -430,8 +445,6 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
       const el = AngularEditor.toDOMNode(editor, editor);
       const domSelection = root.getSelection();
 
-      console.log(1);
-
       if (activeElement === el) {
         state.latestElement = activeElement;
         IS_FOCUSED.set(editor, true);
@@ -440,13 +453,10 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
       }
 
       if (!domSelection) {
-        console.log(2);
         return Transforms.deselect(editor);
       }
 
       const { anchorNode, focusNode } = domSelection;
-
-      console.log(3);
 
       const anchorNodeSelectable =
         EditableUtils.hasEditableTarget(editor, anchorNode) ||
@@ -456,17 +466,12 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
         EditableUtils.hasEditableTarget(editor, focusNode) ||
         EditableUtils.isTargetInsideNonReadonlyVoid(editor, focusNode);
 
-        console.log(4);
-
       if (anchorNodeSelectable && focusNodeSelectable) {
-        console.log(5);
 
         const range = AngularEditor.toSlateRange(editor, domSelection, {
           exactMatch: false,
           suppressThrow: true,
         });
-
-        console.log(6);
 
         if (range) {
           if (
@@ -474,45 +479,99 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
             Range.equals(range, this.editor.selection) &&
             !EditableUtils.hasStringTarget(domSelection)
           ) {
-            console.log(7);
             // force adjust DOMSelection
-            this.toNativeSelection();
+            this.updateSelectionOnChanges();
           }
-          
-          console.log(8);
 
           if (
             !AngularEditor.isComposing(editor) &&
             !androidInputManager?.hasPendingDiffs() &&
             !androidInputManager?.isFlushing()
           ) {
-            console.log(9);
             Transforms.select(editor, range);
           } else {
-            console.log(10);
             androidInputManager?.handleUserSelect(range);
           }
-          console.log(11);
         }
       }
     }
-    console.log(12);
   }
 
-  private toNativeSelection(): void {
-    try {
-      const { selection } = this.editor;
-      const root = AngularEditor.findDocumentOrShadowRoot(this.editor);
-      const domSelection = (root as Document).getSelection();
+  private updateMarksOnChanges(): void {
+    const decorations = this.decorate([this.editor, []]);
 
-      if (
-        this.isComposing ||
-        !domSelection ||
-        !AngularEditor.isFocused(this.editor)
-      ) {
-        return;
+    if (
+      this.placeholder &&
+      this.editor.children.length === 1 &&
+      Array.from(Node.texts(this.editor)).length === 1 &&
+      Node.string(this.editor) === "" &&
+      !this.isComposing
+    ) {
+      const start = Editor.start(this.editor, []);
+      decorations.push({
+        [PLACEHOLDER_SYMBOL]: true,
+        placeholder: this.placeholder,
+        anchor: start,
+        focus: start,
+      } as BaseRange);
+    }
+
+    const { marks } = this.editor;
+    this.state.hasMarkPlaceholder = false;
+
+    if (
+      this.editor.selection &&
+      Range.isCollapsed(this.editor.selection) &&
+      marks
+    ) {
+      const { anchor } = this.editor.selection;
+      const { text, ...rest } = Node.leaf(this.editor, anchor.path);
+
+      if (!Text.equals(rest as Text, marks as Text, { loose: true })) {
+        this.state.hasMarkPlaceholder = true;
+
+        const unset = Object.keys(rest).reduce((acc, mark) => {
+          return {
+            ...acc,
+            [mark]: null,
+          };
+        }, {});
+
+        decorations.push({
+          [MARK_PLACEHOLDER_SYMBOL]: true,
+          ...unset,
+          ...marks,
+
+          anchor,
+          focus: anchor,
+        });
       }
+    }
 
+    setTimeout(() => {
+      if (marks) {
+        EDITOR_TO_PENDING_INSERTION_MARKS.set(this.editor, marks);
+      } else {
+        EDITOR_TO_PENDING_INSERTION_MARKS.delete(this.editor);
+      }
+    });
+  }
+
+  private updateSelectionOnChanges(): void {
+    // Make sure the DOM selection state is in sync.
+    const { selection } = this.editor;
+    const root = AngularEditor.findDocumentOrShadowRoot(this.editor);
+    const domSelection = root.getSelection();
+
+    if (
+      !domSelection ||
+      !AngularEditor.isFocused(this.editor) ||
+      this.androidInputManager?.hasPendingAction()
+    ) {
+      return;
+    }
+
+    const setDomSelection = (forceChange?: boolean) => {
       const hasDomSelection = domSelection.type !== "None";
 
       // If the DOM selection is properly unset, we're done.
@@ -520,7 +579,6 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
         return;
       }
 
-      // If the DOM selection is already correct, we're done.
       // verify that the dom selection is in the editor
       const editorElement = EDITOR_TO_ELEMENT.get(this.editor)!;
       let hasDomSelectionInEditor = false;
@@ -536,16 +594,35 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
         hasDomSelection &&
         hasDomSelectionInEditor &&
         selection &&
-        EditableUtils.hasStringTarget(domSelection) &&
-        Range.equals(
-          AngularEditor.toSlateRange(this.editor, domSelection, {
-            exactMatch: false,
-            suppressThrow: false,
-          }),
-          selection
-        )
+        !forceChange
       ) {
-        return;
+        const slateRange = AngularEditor.toSlateRange(
+          this.editor,
+          domSelection,
+          {
+            exactMatch: true,
+
+            // domSelection is not necessarily a valid Slate range
+            // (e.g. when clicking on contentEditable:false element)
+            suppressThrow: true,
+          }
+        );
+
+        if (slateRange && Range.equals(slateRange, selection)) {
+          if (!this.state.hasMarkPlaceholder) {
+            return;
+          }
+
+          // Ensure selection is inside the mark placeholder
+          const { anchorNode } = domSelection;
+          if (
+            anchorNode?.parentElement?.hasAttribute(
+              "data-slate-mark-placeholder"
+            )
+          ) {
+            return;
+          }
+        }
       }
 
       // when <Editable/> is being controlled through external value
@@ -558,24 +635,20 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
           domSelection,
           {
             exactMatch: false,
-            suppressThrow: false,
+            suppressThrow: true,
           }
         );
         return;
       }
 
       // Otherwise the DOM selection is out of sync, so update it.
-      const el = AngularEditor.toDOMNode(this.editor, this.editor);
       this.state.isUpdatingSelection = true;
 
-      const newDomRange =
+      const newDomRange: DOMRange | null =
         selection && AngularEditor.toDOMRange(this.editor, selection);
 
       if (newDomRange) {
-        // COMPAT: Since the DOM range has no concept of backwards/forwards
-        // we need to check and do the right thing here.
-        if (Range.isBackward(selection)) {
-          // eslint-disable-next-line max-len
+        if (Range.isBackward(selection!)) {
           domSelection.setBaseAndExtent(
             newDomRange.endContainer,
             newDomRange.endOffset,
@@ -583,7 +656,6 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
             newDomRange.startOffset
           );
         } else {
-          // eslint-disable-next-line max-len
           domSelection.setBaseAndExtent(
             newDomRange.startContainer,
             newDomRange.startOffset,
@@ -591,25 +663,67 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
             newDomRange.endOffset
           );
         }
+        EditableUtils.scrollSelectionIntoView(this.editor, newDomRange);
       } else {
         domSelection.removeAllRanges();
       }
 
+      return newDomRange;
+    };
+
+    const newDomRange = setDomSelection();
+    const ensureSelection = this.androidInputManager?.isFlushing() === "action";
+
+    if (!IS_ANDROID || !ensureSelection) {
       setTimeout(() => {
         // COMPAT: In Firefox, it's not enough to create a range, you also need
         // to focus the contenteditable element too. (2016/11/16)
         if (newDomRange && IS_FIREFOX) {
+          const el = AngularEditor.toDOMNode(this.editor, this.editor);
           el.focus();
         }
 
         this.state.isUpdatingSelection = false;
       });
-    } catch (error) {
-      this.editor.onError({
-        code: SlateErrorCode.ToNativeSelectionError,
-        nativeError: error,
-      });
+      return;
     }
+
+    let timeoutId: number | null = null;
+    const animationFrameId = requestAnimationFrame(() => {
+      if (ensureSelection) {
+        const ensureDomSelection = (forceChange?: boolean) => {
+          try {
+            const el = AngularEditor.toDOMNode(this.editor, this.editor);
+            el.focus();
+
+            setDomSelection(forceChange);
+          } catch (e) {
+            // Ignore, dom and state might be out of sync
+          }
+        };
+
+        // Compat: Android IMEs try to force their selection by manually re-applying it even after we set it.
+        // This essentially would make setting the slate selection during an update meaningless, so we force it
+        // again here. We can't only do it in the setTimeout after the animation frame since that would cause a
+        // visible flicker.
+        ensureDomSelection();
+
+        timeoutId = setTimeout(() => {
+          // COMPAT: While setting the selection in an animation frame visually correctly sets the selection,
+          // it doesn't update GBoards spellchecker state. We have to manually trigger a selection change after
+          // the animation frame to ensure it displays the correct state.
+          ensureDomSelection(true);
+          this.state.isUpdatingSelection = false;
+        });
+      }
+    });
+  }
+
+  // #region listeners
+
+  @HostListener("document:selectionchange", [])
+  public onSelectionChangeHandler(): void {
+    this.scheduleOnSelectionChange();
   }
 
   @HostListener("beforeinput", ["$event"])
@@ -1117,7 +1231,6 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
 
       const { selection } = editor;
       if (selection) {
-
         if (Range.isExpanded) {
           this.solveSelectionIssues();
         }
@@ -1586,6 +1699,8 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
     }
   }
 
+  // #endregion
+
   private isomorphicLayoutEffect(): void {
     const ref = this.ref;
     const editor = this.editor;
@@ -1903,9 +2018,11 @@ export class EditableComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private solveSelectionIssues(): void {
+    this.isomorphicLayoutEffect();
     this.detectContext();
     this.cdRef.detectChanges();
-    this.toNativeSelection();
+    this.updateMarksOnChanges();
+    this.updateSelectionOnChanges();
   }
 }
 
