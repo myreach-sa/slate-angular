@@ -6,9 +6,12 @@ import {
     IS_READONLY,
     NODE_TO_INDEX,
     NODE_TO_PARENT,
-    NODE_TO_ELEMENT,
     NODE_TO_KEY,
-    EDITOR_TO_WINDOW
+    EDITOR_TO_WINDOW,
+    IS_COMPOSING,
+    EDITOR_TO_KEY_TO_ELEMENT,
+    EDITOR_TO_SCHEDULE_FLUSH,
+    EDITOR_TO_PENDING_DIFFS
 } from '../utils/weak-maps';
 import {
     DOMElement,
@@ -26,8 +29,9 @@ import { Injector } from '@angular/core';
 import { NodeEntry } from 'slate';
 import { SlateError } from '../types/error';
 import { Key } from '../utils/key';
-import { IS_CHROME, IS_FIREFOX } from '../utils/environment';
+import { IS_ANDROID, IS_CHROME, IS_FIREFOX } from '../utils/environment';
 import { FAKE_LEFT_BLOCK_CARD_OFFSET, FAKE_RIGHT_BLOCK_CARD_OFFSET, getCardTargetAttribute, isCardCenterByTargetAttr, isCardLeftByTargetAttr, isCardRightByTargetAttr } from '../utils/block-card';
+import { SafeAny } from '../types';
 
 /**
  * An Angular and DOM-specific version of the `Editor` interface.
@@ -48,6 +52,14 @@ export interface AngularEditor extends BaseEditor {
 }
 
 export const AngularEditor = {
+    /**
+     * Check if the user is currently composing inside the editor.
+     */
+  
+    isComposing(editor: AngularEditor): boolean {
+      return !!IS_COMPOSING.get(editor);
+    },
+    
     /**
      * Return the host window of the current editor.
      */
@@ -122,10 +134,9 @@ export const AngularEditor = {
     findDocumentOrShadowRoot(editor: AngularEditor): Document | ShadowRoot {
         const el = AngularEditor.toDOMNode(editor, editor)
         const root = el.getRootNode()
-
         if (
             (root instanceof Document || root instanceof ShadowRoot) &&
-            root.getSelection != null
+            (root as Document).getSelection != null
         ) {
             return root
         }
@@ -200,7 +211,7 @@ export const AngularEditor = {
     deselect(editor: AngularEditor): void {
         const { selection } = editor;
         const root = AngularEditor.findDocumentOrShadowRoot(editor);
-        const domSelection = root.getSelection();
+        const domSelection = (root as Document).getSelection();
 
         if (domSelection && domSelection.rangeCount > 0) {
             domSelection.removeAllRanges();
@@ -236,9 +247,17 @@ export const AngularEditor = {
             return false;
         }
 
-        return targetEl.closest(`[data-slate-editor]`) === editorEl &&
-            (!editable || targetEl.isContentEditable ||
-                !!targetEl.getAttribute('data-slate-zero-width'));
+        return (
+            targetEl.closest(`[data-slate-editor]`) === editorEl &&
+            (!editable || targetEl.isContentEditable
+                ? true
+                : (
+                    typeof targetEl.isContentEditable === "boolean" && // isContentEditable exists only on HTMLElement, and on other nodes it will be undefined
+                    // this is the core logic that lets you know you got the right editor.selection instead of null when editor is contenteditable="false"(readOnly)
+                    targetEl.closest('[contenteditable="false"]') === editorEl
+                ) || !!targetEl.getAttribute("data-slate-zero-width")
+            )
+        );
     },
 
     /**
@@ -296,9 +315,10 @@ export const AngularEditor = {
      */
 
     toDOMNode(editor: AngularEditor, node: Node): HTMLElement {
+        const KEY_TO_ELEMENT = EDITOR_TO_KEY_TO_ELEMENT.get(editor);
         const domNode = Editor.isEditor(node)
             ? EDITOR_TO_ELEMENT.get(editor)
-            : NODE_TO_ELEMENT.get(node);
+            : KEY_TO_ELEMENT?.get(AngularEditor.findKey(editor, node));
 
         if (!domNode) {
             throw new Error(`Cannot resolve a DOM node from Slate node: ${JSON.stringify(node)}`);
@@ -341,28 +361,39 @@ export const AngularEditor = {
         const texts = Array.from(el.querySelectorAll(selector));
         let start = 0;
 
-        for (const text of texts) {
+        for (let i = 0; i < texts.length; i++) {
+            const text = texts[i];
             const domNode = text.childNodes[0] as HTMLElement;
-
+      
             if (domNode == null || domNode.textContent == null) {
                 continue;
             }
-
+      
             const { length } = domNode.textContent;
-            const attr = text.getAttribute('data-slate-length');
+            const attr = text.getAttribute("data-slate-length");
             const trueLength = attr == null ? length : parseInt(attr, 10);
             const end = start + trueLength;
-
+      
+            // Prefer putting the selection inside the mark placeholder to ensure
+            // composed text is displayed with the correct marks.
+            const nextText = texts[i + 1];
+            if (
+                point.offset === end &&
+                nextText?.hasAttribute("data-slate-mark-placeholder")
+            ) {
+                domPoint = [
+                    nextText,
+                    nextText.textContent?.startsWith("\uFEFF") ? 1 : 0
+                ];
+                break;
+            }
+      
             if (point.offset <= end) {
                 const offset = Math.min(length, Math.max(0, point.offset - start));
                 domPoint = [domNode, offset];
-                // fixed cursor position after zero width char
-                if (offset === 0 && length === 1 && domNode.textContent === '\uFEFF') {
-                    domPoint = [domNode, offset + 1];
-                }
                 break;
             }
-
+      
             start = end;
         }
 
@@ -463,15 +494,14 @@ export const AngularEditor = {
         }
 
         // Else resolve a range from the caret position where the drop occured.
-        let domRange;
-        const window = AngularEditor.getWindow(editor);
-        const { document } = window;
+        let domRange: DOMRange;
+        const { document } = AngularEditor.getWindow(editor);
 
         // COMPAT: In Firefox, `caretRangeFromPoint` doesn't exist. (2016/07/25)
         if (document.caretRangeFromPoint) {
             domRange = document.caretRangeFromPoint(x, y);
         } else {
-            const position = document.caretPositionFromPoint(x, y);
+            const position = (document as SafeAny).caretPositionFromPoint(x, y);
 
             if (position) {
                 domRange = document.createRange();
@@ -485,7 +515,7 @@ export const AngularEditor = {
         }
 
         // Resolve a Slate range from the DOM range.
-        const range = AngularEditor.toSlateRange(editor, domRange);
+        const range = AngularEditor.toSlateRange(editor, domRange, { exactMatch: false, suppressThrow: false });
         return range;
     },
 
@@ -493,10 +523,13 @@ export const AngularEditor = {
      * Find a Slate point from a DOM selection's `domNode` and `domOffset`.
      */
 
-    toSlatePoint(editor: AngularEditor, domPoint: DOMPoint): Point {
+    toSlatePoint<T extends boolean>(editor: AngularEditor, domPoint: DOMPoint, options: { exactMatch: T; suppressThrow: T; }): T extends true ? Point | null : Point {
         const [domNode] = domPoint;
-        const [nearestNode, nearestOffset] = normalizeDOMPoint(domPoint);
-        let parentNode = nearestNode.parentNode as DOMElement;
+        const { exactMatch, suppressThrow } = options;
+        const [nearestNode, nearestOffset] = exactMatch
+        ? domPoint
+        : normalizeDOMPoint(domPoint);
+        const parentNode = nearestNode.parentNode as DOMElement;
         let textNode: DOMElement | null = null;
         let offset = 0;
 
@@ -548,81 +581,163 @@ export const AngularEditor = {
         }
 
         if (parentNode) {
-            const voidNode = parentNode.closest('[data-slate-void="true"]');
-            let leafNode = parentNode.closest('[data-slate-leaf]');
+            const editorEl = AngularEditor.toDOMNode(editor, editor);
+            const potentialVoidNode = parentNode.closest('[data-slate-void="true"]');
+            // Need to ensure that the closest void node is actually a void node
+            // within this editor, and not a void node within some parent editor. This can happen
+            // if this editor is within a void node of another editor ("nested editors", like in
+            // the "Editable Voids" example on the docs site).
+            const voidNode =
+              potentialVoidNode && editorEl.contains(potentialVoidNode)
+                ? potentialVoidNode
+                : null;
+            let leafNode = parentNode.closest("[data-slate-leaf]");
             let domNode: DOMElement | null = null;
-
+      
             // Calculate how far into the text node the `nearestNode` is, so that we
             // can determine what the offset relative to the text node is.
             if (leafNode) {
-                textNode = leafNode.closest('[data-slate-node="text"]')!;
-                const window = AngularEditor.getWindow(editor);
-                const range = window.document.createRange();
-                range.setStart(textNode, 0);
-                range.setEnd(nearestNode, nearestOffset);
-                const contents = range.cloneContents();
-                const removals = [
+                textNode = leafNode.closest('[data-slate-node="text"]');
+      
+                if (textNode) {
+                    const window = AngularEditor.getWindow(editor);
+                    const range = window.document.createRange();
+                    range.setStart(textNode, 0);
+                    range.setEnd(nearestNode, nearestOffset);
+        
+                    const contents = range.cloneContents();
+                    const removals = [
                     ...Array.prototype.slice.call(
-                        contents.querySelectorAll('[data-slate-zero-width]')
+                        contents.querySelectorAll("[data-slate-zero-width]")
                     ),
                     ...Array.prototype.slice.call(
-                        contents.querySelectorAll('[contenteditable=false]')
-                    ),
-                ];
-
-                removals.forEach(el => {
+                        contents.querySelectorAll("[contenteditable=false]")
+                    )
+                    ];
+        
+                    removals.forEach(el => {
+                    // COMPAT: While composing at the start of a text node, some keyboards put
+                    // the text content inside the zero width space.
+                    if (
+                        IS_ANDROID &&
+                        !exactMatch &&
+                        el.hasAttribute("data-slate-zero-width") &&
+                        el.textContent.length > 0 &&
+                        el.textContext !== "\uFEFF"
+                    ) {
+                        if (el.textContent.startsWith("\uFEFF")) {
+                        el.textContent = el.textContent.slice(1);
+                        }
+        
+                        return;
+                    }
+        
                     el!.parentNode!.removeChild(el);
-                });
-
-                // COMPAT: Edge has a bug where Range.prototype.toString() will
-                // convert \n into \r\n. The bug causes a loop when slate-react
-                // attempts to reposition its cursor to match the native position. Use
-                // textContent.length instead.
-                // https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/10291116/
-                offset = contents.textContent!.length;
-                domNode = textNode;
+                    });
+        
+                    // COMPAT: Edge has a bug where Range.prototype.toString() will
+                    // convert \n into \r\n. The bug causes a loop when slate-react
+                    // attempts to reposition its cursor to match the native position. Use
+                    // textContent.length instead.
+                    // https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/10291116/
+                    offset = contents.textContent!.length;
+                    domNode = textNode;
+                }
             } else if (voidNode) {
                 // For void nodes, the element with the offset key will be a cousin, not an
-                // ancestor, so find it by going down from the nearest void parent.
-
-                leafNode = voidNode.querySelector('[data-slate-leaf]')!;
-                parentNode = voidNode.querySelector('[data-slate-length="0"]');
-                textNode = leafNode.closest('[data-slate-node="text"]')!;
-                domNode = leafNode;
-                offset = domNode.textContent!.length;
+                // ancestor, so find it by going down from the nearest void parent and taking the
+                // first one that isn't inside a nested editor.
+                const leafNodes = voidNode.querySelectorAll("[data-slate-leaf]");
+                for (let index = 0; index < leafNodes.length; index++) {
+                    const current = leafNodes[index];
+                    if (AngularEditor.hasDOMNode(editor, current)) {
+                        leafNode = current;
+                        break;
+                    }
+                }
+        
+                // COMPAT: In read-only editors the leaf is not rendered.
+                if (!leafNode) {
+                    offset = 1;
+                } else {
+                    textNode = leafNode.closest('[data-slate-node="text"]')!;
+                    domNode = leafNode;
+                    offset = domNode.textContent!.length;
+                    domNode.querySelectorAll("[data-slate-zero-width]").forEach(el => {
+                        offset -= el.textContent!.length;
+                    });
+                }
             }
-
-            // COMPAT: If the parent node is a Slate zero-width space, editor is
-            // because the text node should have no characters. However, during IME
-            // composition the ASCII characters will be prepended to the zero-width
-            // space, so subtract 1 from the offset to account for the zero-width
-            // space character.
-            if (domNode &&
+      
+            if (
+                domNode &&
                 offset === domNode.textContent!.length &&
-                (parentNode && parentNode.hasAttribute('data-slate-zero-width'))
+                // COMPAT: Android IMEs might remove the zero width space while composing,
+                // and we don't add it for line-breaks.
+                IS_ANDROID &&
+                domNode.getAttribute("data-slate-zero-width") === "z" &&
+                domNode.textContent?.startsWith("\uFEFF") &&
+                // COMPAT: If the parent node is a Slate zero-width space, editor is
+                // because the text node should have no characters. However, during IME
+                // composition the ASCII characters will be prepended to the zero-width
+                // space, so subtract 1 from the offset to account for the zero-width
+                // space character.
+                (parentNode.hasAttribute("data-slate-zero-width") ||
+                    // COMPAT: In Firefox, `range.cloneContents()` returns an extra trailing '\n'
+                    // when the document ends with a new-line character. This results in the offset
+                    // length being off by one, so we need to subtract one to account for this.
+                    (IS_FIREFOX && domNode.textContent?.endsWith("\n\n")))
             ) {
                 offset--;
             }
         }
-
-        if (!textNode) {
-            throw new Error(`Cannot resolve a Slate point from DOM point: ${domPoint}`);
+      
+        if (IS_ANDROID && !textNode && !exactMatch) {
+        const node = parentNode.hasAttribute("data-slate-node")
+            ? parentNode
+            : parentNode.closest("[data-slate-node]");
+    
+        if (node && AngularEditor.hasDOMNode(editor, node, { editable: true })) {
+            const slateNode = AngularEditor.toSlateNode(editor, node);
+            let { path, offset } = Editor.start(
+                editor,
+                AngularEditor.findPath(editor, slateNode)
+            );
+    
+            if (!node.querySelector("[data-slate-leaf]")) {
+                offset = nearestOffset;
+            }
+    
+            return { path, offset } as T extends true ? Point | null : Point;
         }
-
+        }
+    
+        if (!textNode) {
+        if (suppressThrow) {
+            return null as T extends true ? Point | null : Point;
+        }
+        throw new Error(
+            `Cannot resolve a Slate point from DOM point: ${domPoint}`
+        );
+        }
+    
         // COMPAT: If someone is clicking from one Slate editor into another,
         // the select event fires twice, once for the old editor's `element`
         // first, and then afterwards for the correct `element`. (2017/03/03)
         const slateNode = AngularEditor.toSlateNode(editor, textNode!);
         const path = AngularEditor.findPath(editor, slateNode);
-        return { path, offset };
+        return { path, offset } as T extends true ? Point | null : Point;
     },
 
     /**
      * Find a Slate range from a DOM range or selection.
      */
 
-    toSlateRange(editor: AngularEditor, domRange: DOMRange | DOMStaticRange | DOMSelection): Range {
-        const el = isDOMSelection(domRange) ? domRange.anchorNode : domRange.startContainer;
+    toSlateRange<T extends boolean>(editor: AngularEditor, domRange: DOMRange | DOMStaticRange | DOMSelection, options: { exactMatch: T; suppressThrow: T; }): T extends true ? Range | null : Range {
+        const { exactMatch, suppressThrow } = options;
+        const el = isDOMSelection(domRange)
+        ? domRange.anchorNode
+        : domRange.startContainer;
         let anchorNode;
         let anchorOffset;
         let focusNode;
@@ -640,9 +755,7 @@ export const AngularEditor = {
                 // (2020/08/08)
                 // https://bugs.chromium.org/p/chromium/issues/detail?id=447523
                 if (IS_CHROME && hasShadowRoot()) {
-                    isCollapsed =
-                        domRange.anchorNode === domRange.focusNode &&
-                        domRange.anchorOffset === domRange.focusOffset;
+                    isCollapsed = domRange.anchorNode === domRange.focusNode && domRange.anchorOffset === domRange.focusOffset;
                 } else {
                     isCollapsed = domRange.isCollapsed;
                 }
@@ -655,14 +768,51 @@ export const AngularEditor = {
             }
         }
 
-        if (anchorNode == null || focusNode == null || anchorOffset == null || focusOffset == null) {
-            throw new Error(`Cannot resolve a Slate range from DOM range: ${domRange}`);
+        if (
+            anchorNode == null ||
+            focusNode == null ||
+            anchorOffset == null ||
+            focusOffset == null
+        ) {
+            throw new Error(
+                `Cannot resolve a Slate range from DOM range: ${domRange}`
+            );
         }
 
-        const anchor = AngularEditor.toSlatePoint(editor, [anchorNode, anchorOffset]);
-        const focus = isCollapsed ? anchor : AngularEditor.toSlatePoint(editor, [focusNode, focusOffset]);
+        const anchor = AngularEditor.toSlatePoint(
+            editor,
+            [anchorNode, anchorOffset],
+            { exactMatch, suppressThrow }
+        );
+        if (!anchor) {
+            return null as T extends true ? Range | null : Range;
+        }
 
-        return { anchor, focus };
+        const focus = isCollapsed
+            ? anchor
+            : AngularEditor.toSlatePoint(editor, [focusNode, focusOffset], {
+                exactMatch,
+                suppressThrow
+                });
+        if (!focus) {
+            return null as T extends true ? Range | null : Range;
+        }
+
+        let range: Range = { anchor: anchor as Point, focus: focus as Point };
+        // if the selection is a hanging range that ends in a void
+        // and the DOM focus is an Element
+        // (meaning that the selection ends before the element)
+        // unhang the range to avoid mistakenly including the void
+        if (
+            Range.isExpanded(range) &&
+            Range.isForward(range) &&
+            isDOMElement(focusNode) &&
+            Editor.void(editor, { at: range.focus, mode: "highest" })
+        ) {
+            range = Editor.unhangRange(editor, range, { voids: true });
+        }
+
+        return (range as unknown) as T extends true ? Range | null : Range;
     },
 
     isLeafBlock(editor: AngularEditor, node: Node): boolean {
@@ -729,5 +879,19 @@ export const AngularEditor = {
         return (
             Editor.hasPath(editor, anchor.path) && Editor.hasPath(editor, focus.path)
         );
+    },
+
+    /**
+     * Experimental and android specific: Flush all pending diffs and cancel composition at the next possible time.
+     */
+    androidScheduleFlush(editor: Editor) {
+      EDITOR_TO_SCHEDULE_FLUSH.get(editor)?.()
+    },
+  
+    /**
+     * Experimental and android specific: Get pending diffs
+     */
+    androidPendingDiffs(editor: Editor) {
+      return EDITOR_TO_PENDING_DIFFS.get(editor)
     },
 };
