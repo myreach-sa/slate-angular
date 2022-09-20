@@ -344,7 +344,7 @@ export const withAngular = <T extends Editor>(editor: T, clipboardFormatKey = 'x
   return e;
 };
 
-const getMatches = (e: Editor, path: Path) => {
+const getMatches = (e: AngularEditor, path: Path) => {
   const matches: [Path, Key][] = []
   for (const [n, p] of Editor.levels(e, { at: path })) {
     const key = AngularEditor.findKey(e, n)
