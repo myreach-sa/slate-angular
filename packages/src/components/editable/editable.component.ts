@@ -586,7 +586,7 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                 const unset = Object.keys(rest).map(mark => [mark, null]).reduce((obj, [key, val]) => {
                     obj[key] = val;
                     return obj;
-                });
+                }, {});
 
                 decorations.push({
                     [MARK_PLACEHOLDER_SYMBOL]: true,

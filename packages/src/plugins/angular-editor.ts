@@ -909,7 +909,7 @@ export const AngularEditor = {
 function getFirstChildWithoutComments(node: DOMElement): HTMLElement {
     const children = node.childNodes;
 
-    for (let i = 0; children.length; i++) {
+    for (let i = 0; i < children.length; i++) {
         const child = children.item(i);
         if (child.nodeType !== 8) {
             return child as HTMLElement;
