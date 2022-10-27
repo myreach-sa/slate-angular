@@ -32,8 +32,10 @@ const RESOLVE_DELAY = 25;
 // Time with no user interaction before the current user action is considered as done.
 const FLUSH_DELAY = 200;
 
+let i = 0;
+
 // Replace with `const debug = console.log` to debug
-const debug = (..._: unknown[]) => {};
+const debug = (...x: unknown[]) => console.log(i++, " DEBUG ", ...x);
 
 export type CreateAndroidInputManagerOptions = {
   editor: AngularEditor;
@@ -116,6 +118,8 @@ export function createAndroidInputManager({
   };
 
   const flush = () => {
+    debug('flush');
+
     if (flushTimeoutId) {
       clearTimeout(flushTimeoutId);
       flushTimeoutId = null;
@@ -127,6 +131,7 @@ export function createAndroidInputManager({
     }
 
     if (!hasPendingDiffs() && !hasPendingAction()) {
+      debug('applyPendingSelection 1');
       applyPendingSelection();
       return;
     }
@@ -154,8 +159,11 @@ export function createAndroidInputManager({
     let scheduleSelectionChange = !!EDITOR_TO_PENDING_DIFFS.get(editor)?.length;
 
     let diff: TextDiff | undefined;
+    debug('diff', diff);
     while ((diff = EDITOR_TO_PENDING_DIFFS.get(editor)?.[0])) {
       const pendingMarks = EDITOR_TO_PENDING_INSERTION_MARKS.get(editor);
+
+      debug('pendingMarks', pendingMarks);
 
       if (pendingMarks !== undefined) {
         EDITOR_TO_PENDING_INSERTION_MARKS.delete(editor);
@@ -180,6 +188,9 @@ export function createAndroidInputManager({
 
       // Remove diff only after we have applied it to account for it when transforming
       // pending ranges.
+      debug('pendingDiffs3', EDITOR_TO_PENDING_DIFFS.get(editor)?.filter(
+        ({ id }) => id !== diff!.id
+      )!);
       EDITOR_TO_PENDING_DIFFS.set(
         editor,
         EDITOR_TO_PENDING_DIFFS.get(editor)?.filter(
@@ -197,6 +208,7 @@ export function createAndroidInputManager({
         // Ensure we don't restore the pending user (dom) selection
         // since the document and dom state do not match.
         EDITOR_TO_PENDING_SELECTION.delete(editor);
+        debug('onDOMSelectionChange cancel');
         scheduleOnDOMSelectionChange.cancel();
         onDOMSelectionChange.cancel();
         selectionRef?.unref();
@@ -225,9 +237,11 @@ export function createAndroidInputManager({
       scheduleOnDOMSelectionChange();
     }
 
+    debug('onDOMSelectionChange flush');
     scheduleOnDOMSelectionChange.flush();
     onDOMSelectionChange.flush();
 
+    debug('applyPendingSelection 2');
     applyPendingSelection();
 
     const userMarks = EDITOR_TO_USER_MARKS.get(editor);
@@ -239,6 +253,8 @@ export function createAndroidInputManager({
   };
 
   const handleCompositionEnd = (_event: CompositionEvent) => {
+    debug('handleCompositionEnd');
+
     if (compositionEndTimeoutId) {
       clearTimeout(compositionEndTimeoutId);
     }
@@ -278,6 +294,7 @@ export function createAndroidInputManager({
     debug("storeDiff", path, diff);
 
     const pendingDiffs = EDITOR_TO_PENDING_DIFFS.get(editor) ?? [];
+    debug('pendingDiffs2', pendingDiffs);
     EDITOR_TO_PENDING_DIFFS.set(editor, pendingDiffs);
 
     const target = Node.leaf(editor, path);
@@ -405,7 +422,7 @@ export function createAndroidInputManager({
       );
     }
 
-    debug("handleDOMBeforeInput", type);
+    debug("handleDOMBeforeInput", type, event?.data);
 
     switch (type) {
       case "deleteByComposition":
@@ -634,6 +651,8 @@ export function createAndroidInputManager({
   };
 
   const handleUserSelect = (range: Range | null) => {
+    debug('handleUserSelect', range)
+
     EDITOR_TO_PENDING_SELECTION.set(editor, range);
 
     if (flushTimeoutId) {
@@ -684,6 +703,7 @@ export function createAndroidInputManager({
   };
 
   const scheduleFlush = () => {
+    debug('scheduleFlush');
     if (!hasPendingAction()) {
       actionTimeoutId = setTimeout(flush);
     }

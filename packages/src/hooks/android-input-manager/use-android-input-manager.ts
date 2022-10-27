@@ -40,6 +40,7 @@ export function useAndroidInputManager(
   );
 
   EDITOR_TO_SCHEDULE_FLUSH.set(editor, inputManager.scheduleFlush);
+  // console.log("DEBUG CREATION I THINK")
   inputManager.flush();
 
   return inputManager;

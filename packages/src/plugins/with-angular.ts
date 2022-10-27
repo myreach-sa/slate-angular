@@ -41,6 +41,7 @@ export const withAngular = <T extends BaseEditor>(editor: T, clipboardFormatKey 
   EDITOR_TO_KEY_TO_ELEMENT.set(e, new WeakMap())
 
   e.addMark = (key, value) => {
+    console.log("DEBUG ADD_MARK", key, value);
     EDITOR_TO_SCHEDULE_FLUSH.get(e)?.();
 
     if (
@@ -58,6 +59,8 @@ export const withAngular = <T extends BaseEditor>(editor: T, clipboardFormatKey 
   };
 
   e.removeMark = key => {
+    console.log("DEBUG REMOVE_MARK", key);
+    
     if (
       !EDITOR_TO_PENDING_INSERTION_MARKS.get(e) &&
       EDITOR_TO_PENDING_DIFFS.get(e)?.length
@@ -104,15 +107,23 @@ export const withAngular = <T extends BaseEditor>(editor: T, clipboardFormatKey 
     const matches: [Path, Key][] = []
 
     const pendingDiffs = EDITOR_TO_PENDING_DIFFS.get(e)
+
+    console.log("DEBUG apply", pendingDiffs);
+
     if (pendingDiffs?.length) {
       const transformed = pendingDiffs
         .map(textDiff => transformTextDiff(textDiff, op))
         .filter(Boolean) as TextDiff[]
 
+      console.log("DEBUG transformed", transformed);
+
       EDITOR_TO_PENDING_DIFFS.set(e, transformed)
     }
 
     const pendingSelection = EDITOR_TO_PENDING_SELECTION.get(e)
+    
+    console.log("DEBUG pendingSelection abc", pendingSelection, op.type, op);
+
     if (pendingSelection) {
       EDITOR_TO_PENDING_SELECTION.set(
         e,

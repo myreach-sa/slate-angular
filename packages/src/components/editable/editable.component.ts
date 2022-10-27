@@ -136,6 +136,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
 
     @Input() placeholder: string;
 
+    @Input() autoFocus = true;
+
     //#region input event handler
     @Input() beforeInput: (event: Event) => void;
     @Input() blur: (event: Event) => void;
@@ -222,6 +224,12 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
         // add browser class
         let browserClass = IS_FIREFOX ? 'firefox' : (IS_SAFARI ? 'safari' : '');
         browserClass && this.elementRef.nativeElement.classList.add(browserClass);
+
+        if (this.autoFocus) {
+            try {
+                this.elementRef.nativeElement.focus();
+            } catch (error) {}
+        }
     }
 
     ngOnChanges(simpleChanges: SimpleChanges) {
@@ -297,14 +305,45 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
         });
     }
 
+    setPendingInsertionMarks() {
+        const editor = this.editor;
+        const { marks } = editor;
+        
+        console.log(-1, " DEBUG ", "USE EFFECT 1");
+        setTimeout(() => {
+            const { selection } = this.editor;
+            if (selection) {
+                const { anchor } = selection;
+                const text = Node.leaf(editor, anchor.path);
+
+                console.log(-1, " DEBUG ", "WEIRD THING", {selection, text, marks, anchor});
+        
+                // While marks isn't a 'complete' text, we can still use loose Text.equals
+                // here which only compares marks anyway.
+                if (marks && !SlateText.equals(text, marks as SlateText, { loose: true })) {
+                    EDITOR_TO_PENDING_INSERTION_MARKS.set(editor, marks);
+                    return;
+                }
+            }
+
+            EDITOR_TO_PENDING_INSERTION_MARKS.delete(editor)
+        });
+    }
+
     toNativeSelection() {
         try {
             // Make sure the DOM selection state is in sync.
             const editor = this.editor;
             const state = this.state;
-            const { selection } = editor;
+            const { selection, marks } = editor;
             const root = AngularEditor.findDocumentOrShadowRoot(this.editor)
             const domSelection = (root as Document).getSelection();
+
+            console.log(-6, "DEBUG TIO_NATIVE", domSelection);
+
+            this.androidInputManager?.flush();
+
+            this.setPendingInsertionMarks();
 
             if (!domSelection || !AngularEditor.isFocused(editor) || this.androidInputManager?.hasPendingAction()) {
                 return;
@@ -377,6 +416,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                 state.isUpdatingSelection = true;
         
                 const newDomRange: DOMRange | null = selection && AngularEditor.toDOMRange(editor, selection);
+
+                console.log(-5, "DEBUG newDOMRANGE", newDomRange)
         
                 if (newDomRange) {
                     if (Range.isBackward(selection!)) {
@@ -453,6 +494,7 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     }
 
     onChange() {
+        console.log(-3, " DEBUG ", "ON_CHANGE", this.editor.selection);
         this.forceFlush();
         this.onChangeCallback(this.editor.children);
     }
@@ -470,6 +512,7 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
         timeDebug('start data sync');
         this.detectContext();
         this.cdr.detectChanges();
+
         // repair collaborative editing when Chinese input is interrupted by other users' cursors
         // when the DOMElement where the selection is located is removed
         // the compositionupdate and compositionend events will no longer be fired
@@ -660,12 +703,20 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                   isTargetInsideNonReadonlyVoid(editor, focusNode);
         
                 if (anchorNodeSelectable && focusNodeSelectable) {
+                    console.log(-3, " DEBUG ", 'check', root, editor.selection, domSelection);
+
                     const range = AngularEditor.toSlateRange(editor, domSelection, {
                         exactMatch: false,
                         suppressThrow: true
                     });
             
                     if (range) {
+                        console.log("DEBUG beforeHandle", {
+                            composing: AngularEditor.isComposing(editor),
+                            changes: this.androidInputManager?.hasPendingChanges(),
+                            flushing: this.androidInputManager?.isFlushing()
+                        });
+
                         if (
                             !AngularEditor.isComposing(editor) &&
                             !this.androidInputManager?.hasPendingChanges() &&

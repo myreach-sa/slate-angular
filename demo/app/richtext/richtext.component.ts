@@ -153,6 +153,8 @@ export class DemoRichtextComponent implements OnInit {
     }
 
     valueChange(event) {
+        console.log(-2, ' DEBUG ', 'SELECTION ', this.editor.selection);
+
         if (localStorage.getItem(SLATE_DEV_MODE_KEY)) {
             console.log(`anchor: ${JSON.stringify(this.editor.selection?.anchor)}\nfocus:  ${JSON.stringify(this.editor.selection?.focus)}`);
             console.log('operations: ', this.editor.operations);
@@ -193,51 +195,12 @@ export class DemoRichtextComponent implements OnInit {
             }
         }
     }
-    renderLeaf = (text: SlateLeafContext) => {
+    renderLeaf = (leaf: SlateLeafContext) => {
+        // console.log("DEBUG leaf", leaf);
         return DemoLeafMarkComponent;
     }
 }
 const initialValue = [
-    {
-        type: 'paragraph',
-        children: [
-            { text: 'This is editable ' },
-            { text: 'rich', bold: true },
-            { text: ' text, ' },
-            { text: 'much', bold: true, italic: true },
-            { text: ' better than a ' },
-            { text: '<textarea>', 'code-line': true },
-            { text: '!' }
-        ]
-    },
-    {
-        type: 'heading-one',
-        children: [{ text: 'This is h1 ' }]
-    },
-    {
-        type: 'heading-three',
-        children: [{ text: 'This is h3 ' }]
-    },
-    {
-        type: 'paragraph',
-        children: [
-            {
-                text: `Since it's rich text, you can do things like turn a selection of text `
-            },
-            { text: 'bold', bold: true },
-            {
-                text: ', or add a semantically rendered block quote in the middle of the page, like this:'
-            }
-        ]
-    },
-    {
-        type: 'block-quote',
-        children: [{ text: 'A wise quote.' }]
-    },
-    {
-        type: 'paragraph',
-        children: [{ text: 'Try it out for yourself!' }]
-    },
     {
         type: 'paragraph',
         children: [{ text: '' }]
