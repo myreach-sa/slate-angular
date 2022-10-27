@@ -22,7 +22,7 @@ export class SlateLeafComponent extends ViewContainerItem<SlateLeafContext, Base
     }
 
     getViewType(): ViewType {
-        return this.viewContext.renderLeaf && this.viewContext.renderLeaf(this.context.leaf) || SlateDefaultLeafComponent;
+        return this.viewContext.renderLeaf && this.viewContext.renderLeaf(this.context) || SlateDefaultLeafComponent;
     }
 
     memoizedContext(prev: SlateLeafContext, next: SlateLeafContext): boolean {

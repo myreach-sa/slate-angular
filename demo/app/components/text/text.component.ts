@@ -19,19 +19,19 @@ export enum MarkTypes {
 export class DemoTextMarkComponent extends BaseTextComponent {
     attributes = [];
 
-    constructor(public elementRef: ElementRef, public renderer2: Renderer2, cdr: ChangeDetectorRef) {
+    constructor(public elementRef: ElementRef, private renderer: Renderer2, cdr: ChangeDetectorRef) {
         super(elementRef, cdr);
     }
     
     applyTextMark() {
         this.attributes.forEach(attr => {
-            this.renderer2.removeAttribute(this.elementRef.nativeElement, attr);
+            this.renderer.removeAttribute(this.elementRef.nativeElement, attr);
         });
         this.attributes = [];
         for (const key in this.text) {
             if (Object.prototype.hasOwnProperty.call(this.text, key) && key !== 'text' && !!this.text[key]) {
                 const attr = `slate-${key}`;
-                this.renderer2.setAttribute(this.elementRef.nativeElement, attr, 'true');
+                this.renderer.setAttribute(this.elementRef.nativeElement, attr, 'true');
                 this.attributes.push(attr);
             }
         }

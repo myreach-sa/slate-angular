@@ -43,7 +43,7 @@
         "is-hotkey": "^0.1.6",
         "rxjs": "~6.6.0",
         "scroll-into-view-if-needed": ">= 2.2.29",
-        "slate": ">= 0.82.1",
+        "slate": ">= 0.84.0",
         "slate-history": ">= 0.81.3",
         "tslib": "^2.0.0",
         "zone.js": "~0.11.4"

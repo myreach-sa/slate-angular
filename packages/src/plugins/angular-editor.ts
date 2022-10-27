@@ -20,6 +20,7 @@ import {
     DOMRange,
     DOMSelection,
     DOMStaticRange,
+    DOMText,
     hasShadowRoot,
     isDOMElement,
     isDOMSelection,
@@ -363,7 +364,7 @@ export const AngularEditor = {
 
         for (let i = 0; i < texts.length; i++) {
             const text = texts[i];
-            const domNode = text.childNodes[0] as HTMLElement;
+            const domNode = getFirstChildWithoutComments(text);
       
             if (domNode == null || domNode.textContent == null) {
                 continue;
@@ -377,14 +378,23 @@ export const AngularEditor = {
             // Prefer putting the selection inside the mark placeholder to ensure
             // composed text is displayed with the correct marks.
             const nextText = texts[i + 1];
+
             if (
                 point.offset === end &&
                 nextText?.hasAttribute("data-slate-mark-placeholder")
             ) {
+                const domText = getFirstChildWithoutComments(nextText);
+
                 domPoint = [
-                    nextText,
+                    // COMPAT: If we don't explicity set the dom point to be on the actual
+                    // dom text element, chrome will put the selection behind the actual dom
+                    // text element, causing domRange.getBoundingClientRect() calls on a collapsed
+                    // selection to return incorrect zero values (https://bugs.chromium.org/p/chromium/issues/detail?id=435438)
+                    // which will cause issues when scrolling to it.
+                    domText instanceof DOMText ? domText : nextText,
                     nextText.textContent?.startsWith("\uFEFF") ? 1 : 0
                 ];
+
                 break;
             }
       
@@ -895,3 +905,16 @@ export const AngularEditor = {
       return EDITOR_TO_PENDING_DIFFS.get(editor)
     },
 };
+
+function getFirstChildWithoutComments(node: DOMElement): HTMLElement {
+    const children = node.childNodes;
+
+    for (let i = 0; children.length; i++) {
+        const child = children.item(i);
+        if (child.nodeType !== 8) {
+            return child as HTMLElement;
+        }
+    }
+
+    return null;
+}

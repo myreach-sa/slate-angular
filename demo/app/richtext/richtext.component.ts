@@ -1,8 +1,8 @@
 import { Component, ViewChild, TemplateRef, OnInit } from '@angular/core';
 import { createEditor, Text, Editor, Element, Transforms } from 'slate';
 import { withHistory } from 'slate-history';
-import { withAngular } from 'slate-angular';
-import { DemoTextMarkComponent, MarkTypes } from '../components/text/text.component';
+import { SlateLeafContext, withAngular } from 'slate-angular';
+import { DemoLeafMarkComponent, MarkTypes } from '../components/leaf/leaf.component';
 import isHotkey from 'is-hotkey';
 
 const SLATE_DEV_MODE_KEY = 'slate-dev';
@@ -184,12 +184,6 @@ export class DemoRichtextComponent implements OnInit {
         return null;
     }
 
-    renderText = (text: Text) => {
-        if (text[MarkTypes.bold] || text[MarkTypes.italic] || text[MarkTypes.code] || text[MarkTypes.underline]) {
-            return DemoTextMarkComponent;
-        }
-    }
-
     keydown = (event: KeyboardEvent) => {
         for (const hotkey in HOTKEYS) {
             if (isHotkey(hotkey, event as any)) {
@@ -198,6 +192,9 @@ export class DemoRichtextComponent implements OnInit {
                 this.toggleMark(mark);
             }
         }
+    }
+    renderLeaf = (text: SlateLeafContext) => {
+        return DemoLeafMarkComponent;
     }
 }
 const initialValue = [

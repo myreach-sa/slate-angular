@@ -8,7 +8,7 @@ export interface SlateViewContext<T extends AngularEditor = AngularEditor> {
     templateComponent: SlateStringTemplateComponent;
     trackBy: (element: Element) => any;
     renderElement?: (element: Element) => ViewType;
-    renderLeaf?: (text: Text) => ViewType;
+    renderLeaf?: (text: SlateLeafContext) => ViewType;
     renderText?: (text: Text) => ViewType;
     isStrictDecorate: boolean
 }
@@ -55,6 +55,10 @@ export interface SlateElementAttributes {
 }
 
 export interface SlateStringContext {
-    text: string;
-    elementStringLength: number;
+    text?: string;
+    length?: number;
+    isLineBreak?: boolean;
+    isMarkPlaceholder?: boolean;
+    isTrailing?: boolean;
+    isAndroid?: boolean;
 }

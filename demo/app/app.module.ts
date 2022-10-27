@@ -21,6 +21,7 @@ import { DemoPlaceholderComponent } from './placeholder/placeholder.component';
 import { DemoElementEditableButtonComponent } from './components/editable-button/editable-button.component';
 import { DemoInlinesComponent } from './inlines/inlines.component';
 import { DemoElementLinkComponent } from './components/link/link.component';
+import { DemoLeafMarkComponent } from './components/leaf/leaf.component';
 
 @NgModule({
     declarations: [
@@ -31,6 +32,7 @@ import { DemoElementLinkComponent } from './components/link/link.component';
         DemoHugeDocumentComponent,
         DemoElementImageComponent,
         DemoTextMarkComponent,
+        DemoLeafMarkComponent,
         DemoTablesComponent,
         DemoTablesComponent,
         DemoImagesComponent,

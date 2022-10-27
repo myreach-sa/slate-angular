@@ -5,7 +5,8 @@ import {
   Range,
   Path,
   Operation,
-  Point
+  Point,
+  BaseEditor
 } from 'slate';
 import {
   EDITOR_TO_ON_CHANGE,
@@ -31,7 +32,7 @@ import { AngularEditor } from './angular-editor';
 import { SlateError } from '../types/error';
 import { findCurrentLineRange } from '../utils/lines';
 
-export const withAngular = <T extends Editor>(editor: T, clipboardFormatKey = 'x-slate-fragment') => {
+export const withAngular = <T extends BaseEditor>(editor: T, clipboardFormatKey = "x-slate-fragment"): T & AngularEditor => {
   const e = editor as T & AngularEditor;
   const { apply, onChange, deleteBackward, addMark, removeMark } = e;
 
@@ -76,24 +77,24 @@ export const withAngular = <T extends Editor>(editor: T, clipboardFormatKey = 'x
       return deleteBackward(unit);
     }
 
-    if (editor.selection && Range.isCollapsed(editor.selection)) {
-      const parentBlockEntry = Editor.above(editor, {
-        match: n => Editor.isBlock(editor, n),
-        at: editor.selection,
+    if (e.selection && Range.isCollapsed(e.selection)) {
+      const parentBlockEntry = Editor.above(e, {
+        match: n => Editor.isBlock(e, n),
+        at: e.selection,
       });
 
       if (parentBlockEntry) {
         const [, parentBlockPath] = parentBlockEntry;
         const parentElementRange = Editor.range(
-          editor,
+          e,
           parentBlockPath,
-          editor.selection.anchor
+          e.selection.anchor
         );
 
         const currentLineRange = findCurrentLineRange(e, parentElementRange);
 
         if (!Range.isCollapsed(currentLineRange)) {
-          Transforms.delete(editor, { at: currentLineRange });
+          Transforms.delete(e, { at: currentLineRange });
         }
       }
     }
@@ -271,14 +272,14 @@ export const withAngular = <T extends Editor>(editor: T, clipboardFormatKey = 'x
   };
 
   e.deleteCutData = () => {
-    const { selection } = editor;
+    const { selection } = e;
     if (selection) {
       if (Range.isExpanded(selection)) {
-        Editor.deleteFragment(editor);
+        Editor.deleteFragment(e);
       } else {
-        const node = Node.parent(editor, selection.anchor.path);
-        if (Editor.isVoid(editor, node)) {
-          Transforms.delete(editor);
+        const node = Node.parent(e, selection.anchor.path);
+        if (Editor.isVoid(e, node)) {
+          Transforms.delete(e);
         }
       }
     }

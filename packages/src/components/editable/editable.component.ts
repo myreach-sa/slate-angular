@@ -17,7 +17,7 @@ import {
     AfterViewChecked,
     DoCheck
 } from '@angular/core';
-import { NODE_TO_ELEMENT, IS_FOCUSED, EDITOR_TO_ELEMENT, ELEMENT_TO_NODE, IS_READONLY, EDITOR_TO_ON_CHANGE, EDITOR_TO_WINDOW, EDITOR_TO_USER_SELECTION, IS_COMPOSING, EDITOR_TO_PENDING_INSERTION_MARKS, EDITOR_TO_USER_MARKS } from '../../utils/weak-maps';
+import { NODE_TO_ELEMENT, IS_FOCUSED, EDITOR_TO_ELEMENT, ELEMENT_TO_NODE, IS_READONLY, EDITOR_TO_ON_CHANGE, EDITOR_TO_WINDOW, EDITOR_TO_USER_SELECTION, IS_COMPOSING, EDITOR_TO_PENDING_INSERTION_MARKS, EDITOR_TO_USER_MARKS, PLACEHOLDER_SYMBOL, MARK_PLACEHOLDER_SYMBOL } from '../../utils/weak-maps';
 import { Text as SlateText, Element, Transforms, Editor, Range, Path, NodeEntry, Node, Descendant } from 'slate';
 import getDirection from 'direction';
 import { AngularEditor } from '../../plugins/angular-editor';
@@ -42,7 +42,7 @@ import { SlateErrorCode } from '../../types/error';
 import Debug from 'debug';
 import { SlateStringTemplateComponent } from '../string/template.component';
 import { NG_VALUE_ACCESSOR } from '@angular/forms';
-import { SlateChildrenContext, SlateViewContext } from '../../view/context';
+import { SlateChildrenContext, SlateLeafContext, SlateViewContext } from '../../view/context';
 import { ViewType } from '../../types/view';
 import { HistoryEditor } from 'slate-history';
 import { isDecoratorRangeListEqual } from '../../utils';
@@ -68,6 +68,7 @@ type DeferredOperation = () => void;
     selector: 'slate-editable',
     host: {
         class: 'slate-editable-container',
+        '[attr.aria-multiline]': 'readonly ? undefined : true',
         '[attr.contenteditable]': 'readonly ? undefined : true',
         '[attr.role]': `readonly ? undefined : 'textbox'`,
         '[attr.spellCheck]': `!hasBeforeInputSupport ? false : spellCheck`,
@@ -119,7 +120,7 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
 
     @Input() renderElement: (element: Element) => ViewType | null;
 
-    @Input() renderLeaf: (text: SlateText) => ViewType | null;
+    @Input() renderLeaf: (text: SlateLeafContext) => ViewType | null;
 
     @Input() renderText: (text: SlateText) => ViewType | null;
 
@@ -368,6 +369,7 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                         exactMatch: false,
                         suppressThrow: true
                     });
+
                     return;
                 }
         
@@ -548,30 +550,58 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
             return this.placeholderDecorate(editor) || [];
         }
 
+        const decorations = [];
+
         if (
             this.placeholder &&
             editor.children.length === 1 &&
             Array.from(Node.texts(editor)).length === 1 &&
-            Node.string(editor) === ''
+            Node.string(editor) === '' &&
+            !this.isComposing
         ) {
             const start = Editor.start(editor, [])
-            return [
-                {
-                    placeholder: this.placeholder,
-                    anchor: start,
-                    focus: start,
-                },
-            ]
-        } else {
-            return []
+            decorations.push({
+                [PLACEHOLDER_SYMBOL]: true,
+                placeholder: this.placeholder,
+                anchor: start,
+                focus: start,
+            });
         }
+
+        const { marks } = editor;
+        this.state.hasMarkPlaceholder = false;
+
+        if (editor.selection && Range.isCollapsed(editor.selection) && marks) {
+            const { anchor } = editor.selection;
+            const leaf = Node.leaf(editor, anchor.path);
+            const { text, ...rest } = leaf;
+
+            // While marks isn't a 'complete' text, we can still use loose Text.equals
+            // here which only compares marks anyway.
+            if (!SlateText.equals(leaf, marks as SlateText, { loose: true })) {
+                this.state.hasMarkPlaceholder = true;
+
+                const unset = Object.fromEntries(
+                    Object.keys(rest).map(mark => [mark, null])
+                )
+
+                decorations.push({
+                    [MARK_PLACEHOLDER_SYMBOL]: true,
+                    ...unset,
+                    ...marks,
+
+                    anchor,
+                    focus: anchor,
+                });
+            }
+        }
+
+        return decorations;
     }
 
     generateDecorations() {
         const decorations = this.decorate([this.editor, []]);
-        const placeholderDecorations = this.isComposing
-            ? []
-            : this.composePlaceholderDecorate(this.editor)
+        const placeholderDecorations = this.composePlaceholderDecorate(this.editor);
         decorations.push(...placeholderDecorations);
         return decorations;
     }
@@ -643,6 +673,11 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                             this.androidInputManager?.handleUserSelect(range);
                         }
                     }
+                }
+
+                // Deselect the editor if the dom selection is not selectable in readonly mode
+                if (this.readonly && (!anchorNodeSelectable || !focusNodeSelectable)) {
+                  Transforms.deselect(editor)
                 }
             }
         } catch (error) {
@@ -877,13 +912,6 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                     case "insertFromYank":
                     case "insertReplacementText":
                     case "insertText": {
-                        const { selection } = editor;
-                        if (selection) {
-                            if (Range.isExpanded(selection)) {
-                            Editor.deleteFragment(editor);
-                            }
-                        }
-            
                         if (type === "insertFromComposition") {
                             // COMPAT: in Safari, `compositionend` is dispatched after the
                             // `beforeinput` for "insertFromComposition". But if we wait for it
@@ -1555,7 +1583,10 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                             if (
                                 Element.isElement(currentNode) &&
                                 Editor.isVoid(editor, currentNode) &&
-                                Editor.isInline(editor, currentNode)
+                                (
+                                    Editor.isInline(editor, currentNode) ||
+                                    Editor.isBlock(editor, currentNode)
+                                )
                             ) {
                                 event.preventDefault();
                                 Editor.deleteBackward(editor, { unit: "block" });
