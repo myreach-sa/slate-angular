@@ -10,5 +10,5 @@
         [attr.data-slate-mark-placeholder]="context.isMarkPlaceholder ? true : undefined"
     ><ng-container
         *ngIf="(!isAndroid || !context.isLineBreak)"
-    ></ng-container><br *ngIf="context.isLineBreak" /></span>
+    >{{ '\uFEFF' }}</ng-container><br *ngIf="context.isLineBreak" /></span>
 </ng-template>
