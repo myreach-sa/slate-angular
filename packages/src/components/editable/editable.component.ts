@@ -15,7 +15,6 @@ import {
     OnChanges,
     SimpleChanges,
     AfterViewChecked,
-    DoCheck
 } from '@angular/core';
 import { NODE_TO_ELEMENT, IS_FOCUSED, EDITOR_TO_ELEMENT, ELEMENT_TO_NODE, IS_READONLY, EDITOR_TO_ON_CHANGE, EDITOR_TO_WINDOW, EDITOR_TO_USER_SELECTION, IS_COMPOSING, EDITOR_TO_PENDING_INSERTION_MARKS, EDITOR_TO_USER_MARKS, PLACEHOLDER_SYMBOL, MARK_PLACEHOLDER_SYMBOL } from '../../utils/weak-maps';
 import { Text as SlateText, Element, Transforms, Editor, Range, Path, NodeEntry, Node, Descendant } from 'slate';
@@ -25,7 +24,6 @@ import {
     DOMElement,
     DOMNode,
     isDOMNode,
-    DOMStaticRange,
     DOMRange,
     isDOMElement,
     isPlainTextOnlyPaste,
@@ -34,7 +32,7 @@ import {
     DOMText
 } from '../../utils/dom';
 import { Subject } from 'rxjs';
-import { IS_FIREFOX, IS_SAFARI, IS_EDGE_LEGACY, IS_CHROME_LEGACY, IS_CHROME, HAS_BEFORE_INPUT_SUPPORT, IS_ANDROID, IS_FIREFOX_LEGACY, IS_IOS, IS_QQBROWSER, IS_WECHATBROWSER, IS_UC_MOBILE } from '../../utils/environment';
+import { IS_FIREFOX, IS_SAFARI, IS_CHROME, HAS_BEFORE_INPUT_SUPPORT, IS_ANDROID, IS_FIREFOX_LEGACY, IS_IOS, IS_QQBROWSER, IS_WECHATBROWSER, IS_UC_MOBILE } from '../../utils/environment';
 import Hotkeys from '../../utils/hotkeys';
 import { BeforeInputEvent, extractBeforeInputEvent } from '../../custom-event/BeforeInputEventPlugin';
 import { BEFORE_INPUT_EVENTS } from '../../custom-event/before-input-polyfill';
@@ -42,9 +40,8 @@ import { SlateErrorCode } from '../../types/error';
 import Debug from 'debug';
 import { SlateStringTemplateComponent } from '../string/template.component';
 import { NG_VALUE_ACCESSOR } from '@angular/forms';
-import { SlateChildrenContext, SlateLeafContext, SlateViewContext } from '../../view/context';
+import { SlateLeafContext, SlateViewContext } from '../../view/context';
 import { ViewType } from '../../types/view';
-import { HistoryEditor } from 'slate-history';
 import { isDecoratorRangeListEqual } from '../../utils';
 import { check, normalize } from '../../utils/global-normalize';
 import { SlatePlaceholder } from '../../types/feature';
@@ -87,7 +84,7 @@ type DeferredOperation = () => void;
         multi: true
     }]
 })
-export class SlateEditableComponent extends SlateRestoreDomDirective implements OnInit, OnChanges, OnDestroy, AfterViewChecked, DoCheck {
+export class SlateEditableComponent extends SlateRestoreDomDirective implements OnInit, OnChanges, OnDestroy, AfterViewChecked {
     viewContext: SlateViewContext;
 
     private destroy$ = new Subject();
@@ -198,7 +195,7 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
         this.androidInputManager = useAndroidInputManager(this.editor, {
           node: this.elementRef.nativeElement,
           onDOMSelectionChange: this.onDOMSelectionChange,
-          scheduleOnDOMSelectionChange: this.scheduleOnDOMSelectionChange
+          scheduleOnDOMSelectionChange: this.scheduleOnDOMSelectionChange,
         });
     
         let window = getDefaultView(this.elementRef.nativeElement);
@@ -235,7 +232,7 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     ngOnChanges(simpleChanges: SimpleChanges) {
         if (!this.initialized) {
             return;
-        }
+        }        
         const decorateChange = simpleChanges['decorate'];
         if (decorateChange) {
             this.forceFlush();
@@ -308,27 +305,30 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     setPendingInsertionMarks() {
         const editor = this.editor;
         const { marks } = editor;
-        
-        console.log(-1, " DEBUG ", "USE EFFECT 1");
+
         setTimeout(() => {
-            const { selection } = this.editor;
-            if (selection) {
-                const { anchor } = selection;
-                const text = Node.leaf(editor, anchor.path);
-
-                console.log(-1, " DEBUG ", "WEIRD THING", {selection, text, marks, anchor});
-        
-                // While marks isn't a 'complete' text, we can still use loose Text.equals
-                // here which only compares marks anyway.
-                if (marks && !SlateText.equals(text, marks as SlateText, { loose: true })) {
-                    EDITOR_TO_PENDING_INSERTION_MARKS.set(editor, marks);
-                    return;
+            try {
+                const { selection } = this.editor;
+                if (selection) {
+                    const { anchor } = selection;
+                    const text = Node.leaf(editor, anchor.path);
+            
+                    // While marks isn't a 'complete' text, we can still use loose Text.equals
+                    // here which only compares marks anyway.
+                    if (marks && !SlateText.equals(text, marks as SlateText, { loose: true })) {
+                        EDITOR_TO_PENDING_INSERTION_MARKS.set(editor, marks);
+                        return;
+                    }
                 }
-            }
 
-            EDITOR_TO_PENDING_INSERTION_MARKS.delete(editor)
+                EDITOR_TO_PENDING_INSERTION_MARKS.delete(editor)
+            } catch (error) {
+                console.error(error);   
+            }
         });
     }
+
+    protected _idx = 0;
 
     toNativeSelection() {
         try {
@@ -338,12 +338,6 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
             const { selection, marks } = editor;
             const root = AngularEditor.findDocumentOrShadowRoot(this.editor)
             const domSelection = (root as Document).getSelection();
-
-            console.log(-6, "DEBUG TIO_NATIVE", domSelection);
-
-            this.androidInputManager?.flush();
-
-            this.setPendingInsertionMarks();
 
             if (!domSelection || !AngularEditor.isFocused(editor) || this.androidInputManager?.hasPendingAction()) {
                 return;
@@ -416,8 +410,6 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                 state.isUpdatingSelection = true;
         
                 const newDomRange: DOMRange | null = selection && AngularEditor.toDOMRange(editor, selection);
-
-                console.log(-5, "DEBUG newDOMRANGE", newDomRange)
         
                 if (newDomRange) {
                     if (Range.isBackward(selection!)) {
@@ -441,12 +433,12 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                 }
         
                 return newDomRange;
-              };
+            };
         
-              const newDomRange = setDomSelection();
-              const ensureSelection = this.androidInputManager?.isFlushing() === "action";
-        
-              if (!IS_ANDROID || !ensureSelection) {
+            const newDomRange = setDomSelection();
+            const ensureSelection = this.androidInputManager?.isFlushing() === "action";
+    
+            if (!IS_ANDROID || !ensureSelection) {
                 setTimeout(() => {
                     // COMPAT: In Firefox, it's not enough to create a range, you also need
                     // to focus the contenteditable element too. (2016/11/16)
@@ -458,9 +450,9 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                     state.isUpdatingSelection = false;
                 });
                 return;
-              }
+            }
         
-              requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
                 if (ensureSelection) {
                     const ensureDomSelection = (forceChange?: boolean) => {
                         try {
@@ -494,60 +486,20 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     }
 
     onChange() {
-        console.log(-3, " DEBUG ", "ON_CHANGE", this.editor.selection);
         this.forceFlush();
         this.onChangeCallback(this.editor.children);
     }
 
     ngAfterViewChecked() {
         super.ngAfterViewChecked();
-        timeDebug('editable ngAfterViewChecked');
-    }
-
-    ngDoCheck() {
-        timeDebug('editable ngDoCheck');
+        this.forceFlush();
     }
 
     forceFlush() {
-        timeDebug('start data sync');
         this.detectContext();
-        this.cdr.detectChanges();
-
-        // repair collaborative editing when Chinese input is interrupted by other users' cursors
-        // when the DOMElement where the selection is located is removed
-        // the compositionupdate and compositionend events will no longer be fired
-        // so isComposing needs to be corrected
-        // need exec after this.cdr.detectChanges() to render HTML
-        // need exec before this.toNativeSelection() to correct native selection
-        if (this.isComposing) {
-            // Composition input text be not rendered when user composition input with selection is expanded
-            // At this time, the following matching conditions are met, assign isComposing to false, and the status is wrong
-            // this time condition is true and isComposiing is assigned false
-            // Therefore, need to wait for the composition input text to be rendered before performing condition matching
-            setTimeout(() => {
-                const textNode = Node.get(this.editor, this.editor.selection.anchor.path);
-                const textDOMNode = AngularEditor.toDOMNode(this.editor, textNode);
-                let textContent = '';
-                // skip decorate text
-                textDOMNode.querySelectorAll('[editable-text]').forEach((stringDOMNode) => {
-                    let text = stringDOMNode.textContent;
-                    const zeroChar = '\uFEFF';
-                    // remove zero with char
-                    if (text.startsWith(zeroChar)) {
-                        text = text.slice(1);
-                    }
-                    if (text.endsWith(zeroChar)) {
-                        text = text.slice(0, text.length - 1);
-                    }
-                    textContent += text;
-                });
-                if (Node.string(textNode).endsWith(textContent)) {
-                    this.isComposing = false;
-                }
-            }, 0);
-        }
+        this.setPendingInsertionMarks();
         this.toNativeSelection();
-        timeDebug('end data sync');
+        this.androidInputManager?.flush();
     }
 
     initializeContext() {
@@ -703,7 +655,6 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                   isTargetInsideNonReadonlyVoid(editor, focusNode);
         
                 if (anchorNodeSelectable && focusNodeSelectable) {
-                    console.log(-3, " DEBUG ", 'check', root, editor.selection, domSelection);
 
                     const range = AngularEditor.toSlateRange(editor, domSelection, {
                         exactMatch: false,
@@ -711,12 +662,6 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                     });
             
                     if (range) {
-                        console.log("DEBUG beforeHandle", {
-                            composing: AngularEditor.isComposing(editor),
-                            changes: this.androidInputManager?.hasPendingChanges(),
-                            flushing: this.androidInputManager?.isFlushing()
-                        });
-
                         if (
                             !AngularEditor.isComposing(editor) &&
                             !this.androidInputManager?.hasPendingChanges() &&
@@ -757,7 +702,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
             ) {
                 // COMPAT: BeforeInput events aren't cancelable on android, so we have to handle them differently using the android input manager.
                 if (this.androidInputManager) {
-                    return this.androidInputManager.handleDOMBeforeInput(event);
+                    this.androidInputManager.handleDOMBeforeInput(event);
+                    return;
                 }
         
                 // Some IMEs/Chrome extensions like e.g. Grammarly set the selection immediately before
@@ -1010,12 +956,12 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                     Transforms.select(editor, toRestore);
                 }
             }
-          } catch (error) {
+        } catch (error) {
             this.editor.onError({
-              code: SlateErrorCode.OnDOMBeforeInputError,
-              nativeError: error
+                code: SlateErrorCode.OnDOMBeforeInputError,
+                nativeError: error
             });
-          }
+        }
     }
 
     private onDOMInput(_event: Event) {
@@ -1186,9 +1132,6 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                 }
             }
         }
-        
-        this.detectContext();
-        this.cdr.detectChanges();
     }
 
     private onDOMCompositionUpdate(event: CompositionEvent) {
@@ -1201,9 +1144,6 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                 IS_COMPOSING.set(this.editor, true);
             }
         }
-        
-        this.detectContext();
-        this.cdr.detectChanges();
     }
 
     private onDOMCompositionStart(event: CompositionEvent) {
@@ -1238,9 +1178,6 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                 }
             }
         }
-
-        this.detectContext();
-        this.cdr.detectChanges();
     }
 
     private onDOMCopy(event: ClipboardEvent) {
@@ -1663,7 +1600,7 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
             hasEditableTarget(this.editor, event.target)
         ) {
             // COMPAT: Certain browsers don't support the `beforeinput` event, so we
-            // fall back to React's `onPaste` here instead.
+            // fall back to Angular's `onPaste` here instead.
             // COMPAT: Firefox, Chrome and Safari are not emitting `beforeinput` events
             // when "paste without formatting" is used, so fallback (2022/02/20)
             if (!HAS_BEFORE_INPUT_SUPPORT || isPlainTextOnlyPaste(event)) {
@@ -1675,7 +1612,7 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
 
     private onFallbackBeforeInput(event: BeforeInputEvent) {
         // COMPAT: Certain browsers don't support the `beforeinput` event, so we
-        // fall back to React's leaky polyfill instead just for it. It
+        // fall back to Angular's leaky polyfill instead just for it. It
         // only works for the `insertText` input type.
         if (
             !HAS_BEFORE_INPUT_SUPPORT &&

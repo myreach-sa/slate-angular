@@ -675,10 +675,12 @@ export function createAndroidInputManager({
       );
 
     if ((pathChanged && insertPositionHint) || parentPathChanged) {
+      debug('DEBUG2 A');
       insertPositionHint = false;
     }
 
     if (pathChanged || !hasPendingDiffs()) {
+      debug('DEBUG2 B');
       flushTimeoutId = window.setTimeout(flush, FLUSH_DELAY);
     }
   };

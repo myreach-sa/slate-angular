@@ -153,8 +153,6 @@ export class DemoRichtextComponent implements OnInit {
     }
 
     valueChange(event) {
-        console.log(-2, ' DEBUG ', 'SELECTION ', this.editor.selection);
-
         if (localStorage.getItem(SLATE_DEV_MODE_KEY)) {
             console.log(`anchor: ${JSON.stringify(this.editor.selection?.anchor)}\nfocus:  ${JSON.stringify(this.editor.selection?.focus)}`);
             console.log('operations: ', this.editor.operations);
@@ -196,7 +194,7 @@ export class DemoRichtextComponent implements OnInit {
         }
     }
     renderLeaf = (leaf: SlateLeafContext) => {
-        // console.log("DEBUG leaf", leaf);
+        console.log("DEBUG leaf", leaf);
         return DemoLeafMarkComponent;
     }
 }
