@@ -43,7 +43,7 @@ export class SlateRestoreDomDirective implements OnDestroy, AfterViewChecked {
   @Input()
   public set context(context: SlateChildrenContext) {
     this._context = context;
-    this.restoreDOM();
+    // this.restoreDOM();
   }
 
   public get context(): SlateChildrenContext {
@@ -59,6 +59,8 @@ export class SlateRestoreDomDirective implements OnDestroy, AfterViewChecked {
   constructor(public readonly elementRef: ElementRef<HTMLElement>) {}
 
   ngAfterViewChecked(): void {
+    console.log("DEBUG OBSERVE AGAIN");
+    // this.manager?.clear();
     this.observe();
   }
 
@@ -101,6 +103,8 @@ export class SlateRestoreDomDirective implements OnDestroy, AfterViewChecked {
     if (!this.elementRef.nativeElement) {
       throw new Error("Failed to attach MutationObserver, `node` is undefined");
     }
+
+    console.log("DEBUG OBSERVE")
 
     if (this.mutationObserver && this._init && !this._observing) {
       this.mutationObserver?.observe(

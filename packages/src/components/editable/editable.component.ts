@@ -503,7 +503,7 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
         super.ngAfterViewChecked();
         console.log("DEBUG afterViewChecked");
         
-        // this.forceFlush();
+        this.forceFlush();
     }
 
     forceFlush() {
