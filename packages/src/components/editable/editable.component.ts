@@ -497,9 +497,13 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
 
     forceFlush() {
         this.detectContext();
-        this.setPendingInsertionMarks();
-        this.toNativeSelection();
-        this.androidInputManager?.flush();
+        
+        this.ngZone.runOutsideAngular(() => {
+            this.androidInputManager?.flush();
+            this.toNativeSelection();
+            this.setPendingInsertionMarks();
+            this.cdr.detectChanges();
+        })
     }
 
     initializeContext() {
