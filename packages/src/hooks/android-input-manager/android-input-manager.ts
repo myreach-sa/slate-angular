@@ -32,10 +32,8 @@ const RESOLVE_DELAY = 25;
 // Time with no user interaction before the current user action is considered as done.
 const FLUSH_DELAY = 200;
 
-let i = 0;
-
 // Replace with `const debug = console.log` to debug
-const debug = (...x: unknown[]) => console.log(i++, " DEBUG ", ...x);
+const debug = (...x: unknown[]) => {};
 
 export type CreateAndroidInputManagerOptions = {
   editor: AngularEditor;
@@ -712,6 +710,8 @@ export function createAndroidInputManager({
   };
 
   const handleDomMutations = (mutations: MutationRecord[]) => {
+    console.log("DEBUG handleDomMutations")
+
     if (hasPendingDiffs() || hasPendingAction()) {
       return;
     }
@@ -721,6 +721,7 @@ export function createAndroidInputManager({
         isTrackedMutation(editor, mutation, mutations)
       )
     ) {
+      console.log("DEBUG FORCE RENDER")
       // Cause a re-render to restore the dom state if we encounter tracked mutations without
       // a corresponding pending action.
       EDITOR_TO_FORCE_RENDER.get(editor)?.();

@@ -31,6 +31,7 @@ export const createRestoreDomManager = (
   };
 
   function restoreDOM() {
+    console.log("DEBUG restoreDOM", bufferedMutations);
     bufferedMutations.reverse().forEach(mutation => {
       if (mutation.type === "characterData") {
         mutation.target.textContent = mutation.oldValue;

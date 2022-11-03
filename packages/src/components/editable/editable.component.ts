@@ -16,7 +16,7 @@ import {
     SimpleChanges,
     AfterViewChecked,
 } from '@angular/core';
-import { NODE_TO_ELEMENT, IS_FOCUSED, EDITOR_TO_ELEMENT, ELEMENT_TO_NODE, IS_READONLY, EDITOR_TO_ON_CHANGE, EDITOR_TO_WINDOW, EDITOR_TO_USER_SELECTION, IS_COMPOSING, EDITOR_TO_PENDING_INSERTION_MARKS, EDITOR_TO_USER_MARKS, PLACEHOLDER_SYMBOL, MARK_PLACEHOLDER_SYMBOL } from '../../utils/weak-maps';
+import { NODE_TO_ELEMENT, IS_FOCUSED, EDITOR_TO_ELEMENT, ELEMENT_TO_NODE, IS_READONLY, EDITOR_TO_ON_CHANGE, EDITOR_TO_WINDOW, EDITOR_TO_USER_SELECTION, IS_COMPOSING, EDITOR_TO_PENDING_INSERTION_MARKS, EDITOR_TO_USER_MARKS, PLACEHOLDER_SYMBOL, MARK_PLACEHOLDER_SYMBOL, EDITOR_TO_FORCE_RENDER } from '../../utils/weak-maps';
 import { Text as SlateText, Element, Transforms, Editor, Range, Path, NodeEntry, Node, Descendant } from 'slate';
 import getDirection from 'direction';
 import { AngularEditor } from '../../plugins/angular-editor';
@@ -212,6 +212,13 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
         this.ngZone.runOutsideAngular(() => {
             this.initialize();
         });
+
+        EDITOR_TO_FORCE_RENDER.set(this.editor, () => {
+            this.ngZone.run(() => {
+                this.forceFlush();
+            })
+        })
+
         this.initializeViewContext();
         this.initializeContext();
 
@@ -235,6 +242,7 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
         }        
         const decorateChange = simpleChanges['decorate'];
         if (decorateChange) {
+            console.log("DEBUG decorateChange");
             this.forceFlush();
         }
         const readonlyChange = simpleChanges['readonly'];
@@ -486,13 +494,16 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     }
 
     onChange() {
+        console.log("DEBUG onChange");
         this.forceFlush();
         this.onChangeCallback(this.editor.children);
     }
 
     ngAfterViewChecked() {
         super.ngAfterViewChecked();
-        this.forceFlush();
+        console.log("DEBUG afterViewChecked");
+        
+        // this.forceFlush();
     }
 
     forceFlush() {
@@ -622,6 +633,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     }
 
     private onDOMSelectionChange = throttle(() => {
+        console.log("DEBUG onSelectionChange");
+
         try {
             const editor = this.editor;
             const state = this.state;
@@ -691,9 +704,10 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
         }
     });
     
-    private scheduleOnDOMSelectionChange = debounce(this.onDOMSelectionChange, 0);
+    private scheduleOnDOMSelectionChange = debounce(this.onDOMSelectionChange.bind(this), 0);
 
     private onDOMBeforeInput(event: InputEvent) {
+        console.log("DEBUG onBeforeInput");
         try {
             const editor = this.editor;
       
@@ -969,6 +983,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     }
 
     private onDOMInput(_event: Event) {
+        console.log("DEBUG onInput");
+
         if (this.androidInputManager) {
             this.androidInputManager.handleInput();
             return;
@@ -1093,6 +1109,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     }
 
     private onDOMCompositionEnd(event: CompositionEvent) {
+        console.log("DEBUG onCompositionEnd");
+
         if (hasEditableTarget(this.editor, event.target)) {
             if (AngularEditor.isComposing(this.editor)) {
                 this.isComposing = false;
@@ -1139,6 +1157,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     }
 
     private onDOMCompositionUpdate(event: CompositionEvent) {
+        console.log("DEBUG onCompositionUpdate");
+
         if (
             hasEditableTarget(this.editor, event.target) &&
             !this.isDOMEventHandled(event, this.compositionUpdate)
@@ -1151,6 +1171,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     }
 
     private onDOMCompositionStart(event: CompositionEvent) {
+        console.log("DEBUG onCompositionStart");
+
         if (hasEditableTarget(this.editor, event.target)) {
             this.androidInputManager?.handleCompositionStart(event);
 
@@ -1321,6 +1343,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     }
 
     private onDOMKeydown(event: KeyboardEvent) {
+        console.log("DEBUG onKeyDown", event.key);
+
         const editor = this.editor;
         const root = AngularEditor.findDocumentOrShadowRoot(this.editor)
         const { activeElement } = root;
@@ -1615,6 +1639,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     }
 
     private onFallbackBeforeInput(event: BeforeInputEvent) {
+        console.log("DEBUG onBeforeInput fallback");
+
         // COMPAT: Certain browsers don't support the `beforeinput` event, so we
         // fall back to Angular's leaky polyfill instead just for it. It
         // only works for the `insertText` input type.
