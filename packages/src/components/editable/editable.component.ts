@@ -283,7 +283,7 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
         this.addEventListener(
             'selectionchange',
             () => {
-                this.onDOMSelectionChange();
+                this.scheduleOnDOMSelectionChange();
             },
             window.document
         );
@@ -1673,6 +1673,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
 
     ngOnDestroy() {
         super.ngOnDestroy();
+
+        this.disconnectMutationObserver?.();
 
         NODE_TO_ELEMENT.delete(this.editor);
         this.manualListeners.forEach(manualListener => {
