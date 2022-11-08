@@ -33,7 +33,7 @@ export function useAndroidInputManager(
     ...options
   });
 
-  useMutationObserver(
+  const mutationObserverHandler = useMutationObserver(
     node,
     inputManager.handleDomMutations,
     MUTATION_OBSERVER_CONFIG
@@ -43,5 +43,5 @@ export function useAndroidInputManager(
   // console.log("DEBUG CREATION I THINK")
   inputManager.flush();
 
-  return inputManager;
+  return { inputManager, mutationObserverHandler };
 }

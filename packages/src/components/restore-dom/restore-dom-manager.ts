@@ -15,6 +15,7 @@ export const createRestoreDomManager = (
   let bufferedMutations: MutationRecord[] = [];
 
   const clear = () => {
+    console.log('DEBUG5 clear');
     bufferedMutations = [];
   };
 
@@ -22,6 +23,8 @@ export const createRestoreDomManager = (
     if (!receivedUserInput.current) {
       return;
     }
+
+    console.log("DEBUG5 registerMutations", mutations);
 
     const trackedMutations = mutations.filter(mutation =>
       isTrackedMutation(editor, mutation, mutations)
@@ -31,7 +34,7 @@ export const createRestoreDomManager = (
   };
 
   function restoreDOM() {
-    console.log("DEBUG restoreDOM", bufferedMutations);
+    console.log("DEBUG5 restoreDOM", bufferedMutations);
     bufferedMutations.reverse().forEach(mutation => {
       if (mutation.type === "characterData") {
         mutation.target.textContent = mutation.oldValue;

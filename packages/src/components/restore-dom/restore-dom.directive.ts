@@ -59,8 +59,7 @@ export class SlateRestoreDomDirective implements OnDestroy, AfterViewChecked {
   constructor(public readonly elementRef: ElementRef<HTMLElement>) {}
 
   ngAfterViewChecked(): void {
-    console.log("DEBUG OBSERVE AGAIN");
-    // this.manager?.clear();
+    this.manager?.clear();
     this.observe();
   }
 
@@ -84,6 +83,10 @@ export class SlateRestoreDomDirective implements OnDestroy, AfterViewChecked {
   }
 
   restoreDOM(): void {
+    if (IS_ANDROID) {
+      console.log("DEBUG5 !!!! getSnapshotBeforeUpdate");
+    }
+
     const pendingMutations = this.mutationObserver?.takeRecords()
     if (pendingMutations?.length) {
       this.manager?.registerMutations(pendingMutations)
@@ -104,9 +107,11 @@ export class SlateRestoreDomDirective implements OnDestroy, AfterViewChecked {
       throw new Error("Failed to attach MutationObserver, `node` is undefined");
     }
 
-    console.log("DEBUG OBSERVE")
-
     if (this.mutationObserver && this._init && !this._observing) {
+      console.log('DEBUG5 OBSERVE_DOM');
+
+      this._observing = true;
+
       this.mutationObserver?.observe(
         this.elementRef.nativeElement,
         MUTATION_OBSERVER_CONFIG

@@ -5,12 +5,20 @@ export function useMutationObserver(
 ) {
   const mutationObserver = new MutationObserver(callback);
 
-  mutationObserver.takeRecords();
+  const afterRenderPhase = () => {
+    const record = mutationObserver.takeRecords();
+    console.log("DEBUG5 afterRenderPhase", record);
+  };
+
+  afterRenderPhase();
 
   if (!node) {
     throw new Error("Failed to attach MutationObserver, `node` is undefined");
   }
 
   mutationObserver.observe(node, options);
-  return () => mutationObserver.disconnect();
+
+  const disconnect = () => mutationObserver.disconnect();
+
+  return { afterRenderPhase, disconnect };
 }

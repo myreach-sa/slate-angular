@@ -98,7 +98,17 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
         hasMarkPlaceholder: false
     };
 
-    private isComposing = false;
+    private _isComposing = false;
+
+    private set isComposing(isComposing: boolean) {
+        this.shouldUpdate = true;
+        this._isComposing = isComposing;
+        this.cdr.detectChanges();
+    }
+
+    private get isComposing(): boolean {
+        return this._isComposing;
+    }
 
     protected manualListeners: (() => void)[] = [];
 
@@ -171,8 +181,14 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     @ViewChild('templateComponent', { static: true, read: ElementRef }) templateElementRef: ElementRef<any>;
 
     private androidInputManager!: AndroidInputManager;
+    private mutationObserverHandler?: {
+        afterRenderPhase: () => void;
+        disconnect: () => void;
+    };
   
     private onUserInput!: () => void;
+
+    public shouldUpdate = true;
 
     constructor(
         elementRef: ElementRef,
@@ -192,11 +208,13 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
         this.onUserInput = onUserInput;
         this.receivedUserInput = receivedUserInput;
     
-        this.androidInputManager = useAndroidInputManager(this.editor, {
+        const androidInputManager = useAndroidInputManager(this.editor, {
           node: this.elementRef.nativeElement,
           onDOMSelectionChange: this.onDOMSelectionChange,
           scheduleOnDOMSelectionChange: this.scheduleOnDOMSelectionChange,
         });
+        this.androidInputManager = androidInputManager?.inputManager;
+        this.mutationObserverHandler = androidInputManager?.mutationObserverHandler;
     
         let window = getDefaultView(this.elementRef.nativeElement);
         EDITOR_TO_WINDOW.set(this.editor, window);
@@ -206,6 +224,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
         IS_READONLY.set(this.editor, this.readonly);
         EDITOR_TO_ON_CHANGE.set(this.editor, () => {
             this.ngZone.run(() => {
+                this.shouldUpdate = true;
+                this.cdr.detectChanges();
                 this.onChange();
             });
         });
@@ -214,13 +234,12 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
         });
 
         EDITOR_TO_FORCE_RENDER.set(this.editor, () => {
-            this.ngZone.run(() => {
-                this.forceFlush();
-            })
+            this.shouldUpdate = true;
+            this.cdr.detectChanges();
         })
 
         this.initializeViewContext();
-        this.initializeContext();
+        // this.initializeContext();
 
         // remove unused DOM, just keep templateComponent instance
         this.templateElementRef.nativeElement.remove();
@@ -243,7 +262,7 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
         const decorateChange = simpleChanges['decorate'];
         if (decorateChange) {
             console.log("DEBUG decorateChange");
-            this.forceFlush();
+            // this.forceFlush();
         }
         const readonlyChange = simpleChanges['readonly'];
         if (readonlyChange) {
@@ -272,8 +291,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                 });
                 this.editor.children = normalize(value);
             }
-            this.initializeContext();
-            this.cdr.markForCheck();
+            // this.initializeContext();
+            this.cdr.detectChanges();
         }
     }
 
@@ -311,6 +330,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     }
 
     setPendingInsertionMarks() {
+        console.log("DEBUG5 updateMarkPlaceholderMarks");
+
         const editor = this.editor;
         const { marks } = editor;
 
@@ -340,6 +361,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
 
     toNativeSelection() {
         try {
+            console.log("DEBUG5 updateSelection");
+
             // Make sure the DOM selection state is in sync.
             const editor = this.editor;
             const state = this.state;
@@ -495,26 +518,35 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
 
     onChange() {
         console.log("DEBUG onChange");
-        this.forceFlush();
+        // this.forceFlush();
         this.onChangeCallback(this.editor.children);
     }
 
     ngAfterViewChecked() {
-        super.ngAfterViewChecked();
-        console.log("DEBUG afterViewChecked");
-        
         this.forceFlush();
     }
 
     forceFlush() {
-        this.detectContext();
-        
+        const dontUpdate = !this.shouldUpdate && IS_ANDROID
+
+        console.log('----- AFTER RENDER ----- DEBUG5', dontUpdate);
+
+        if (dontUpdate) {
+            return;
+        }
+
+        this.shouldUpdate = !IS_ANDROID || false;
+
         this.ngZone.runOutsideAngular(() => {
-            this.androidInputManager?.flush();
             this.toNativeSelection();
             this.setPendingInsertionMarks();
+
             this.cdr.detectChanges();
-        })
+
+            this.mutationObserverHandler?.afterRenderPhase();
+
+            super.ngAfterViewChecked();
+        });
     }
 
     initializeContext() {
@@ -553,6 +585,22 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                 readonly: this.readonly
             };
         }
+    }
+
+    public onBeforeRender(): void {
+        if (this.shouldUpdate) {
+            this.androidInputManager?.flush();
+        }
+      
+        if (!IS_ANDROID || this.shouldUpdate) {
+            this.generateDecorations();
+        }
+      
+        super.restoreDOM();
+
+        this.initializeContext();
+
+        console.log("----- CHILDREN ----- DEBUG5");
     }
 
     composePlaceholderDecorate(editor: Editor) {
@@ -613,6 +661,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     }
 
     generateDecorations() {
+        console.log("DEBUG5 updateDecorations");
+
         const decorations = this.decorate([this.editor, []]);
         const placeholderDecorations = this.composePlaceholderDecorate(this.editor);
         decorations.push(...placeholderDecorations);
@@ -632,8 +682,8 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
         );
     }
 
-    private onDOMSelectionChange = throttle(() => {
-        console.log("DEBUG onSelectionChange");
+    private onDOMSelectionChangeAux = () => {
+        console.log("DEBUG5 onDOMSelectionChangeAux");
 
         try {
             const editor = this.editor;
@@ -702,9 +752,14 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
                 nativeError: error
             });
         }
-    });
+    };
+
+    private onDOMSelectionChange = throttle(
+        this.onDOMSelectionChangeAux.bind(this),
+        100
+    );
     
-    private scheduleOnDOMSelectionChange = debounce(this.onDOMSelectionChange.bind(this), 0);
+    private scheduleOnDOMSelectionChange = debounce(this.onDOMSelectionChange, 0);
 
     private onDOMBeforeInput(event: InputEvent) {
         console.log("DEBUG onBeforeInput");
@@ -1672,9 +1727,9 @@ export class SlateEditableComponent extends SlateRestoreDomDirective implements 
     //#endregion
 
     ngOnDestroy() {
-        super.ngOnDestroy();
+        this.mutationObserverHandler?.disconnect();
 
-        this.disconnectMutationObserver?.();
+        super.ngOnDestroy();
 
         NODE_TO_ELEMENT.delete(this.editor);
         this.manualListeners.forEach(manualListener => {
